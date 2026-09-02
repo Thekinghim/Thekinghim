@@ -10,7 +10,14 @@ npm run replay  # spelar upp ditt eget arkiv (eller syntetisk ström om det är 
 npm test
 ```
 
-Öppna `http://127.0.0.1:4173`. Inga npm-beroenden, ingen API-nyckel, Node ≥ 20.11.
+Öppna `http://localhost:4173`. Inga npm-beroenden, ingen API-nyckel, Node ≥ 20.11.
+
+Servern är byggd för att köras publikt: den håller **en** anslutning till
+pump.fun och sänder ut till alla besökare över SSE, så besökare kostar en
+öppen anslutning var — inte ett API-anrop var. Se [DEPLOY.md](DEPLOY.md).
+
+`npm run export-demo` skriver en självbärande HTML-fil av det terminalen visar
+just nu, med åldersgräns, för den som vill dela en ögonblicksbild.
 
 ## Datakällor
 

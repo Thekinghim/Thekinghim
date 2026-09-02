@@ -103,7 +103,7 @@ function rowHtml(t) {
   // En token utan prenumeration har inget uppmätt flöde. Att visa 0 vore ett
   // påstående vi inte kan göra — skillnaden mellan "ingen köper" och "vi
   // lyssnar inte" är hela poängen.
-  const live = t.tracking || t.metrics.totalTrades > 0;
+  const live = t.tracking || m.totalTrades > 0;
 
   const v = t.verdict ?? { verdict: 'VÄNTA', reason: '', missing: [] };
   const vcls = v.verdict === 'KÖP' ? 'buy' : v.verdict === 'SKIPPA' ? 'skip' : 'wait';
@@ -114,8 +114,8 @@ function rowHtml(t) {
     const d = t.creatorOpeningShare;
     pills.push([d > 12 ? 'bad' : d > 5 ? 'warn' : 'mut', `dev ${fmt(d, 1)}%`]);
   } else pills.push(['mut', 'dev ?']);
-  if (t.preflight) {
-    const st = t.preflight.state;
+  if (t.preflight?.checks?.authority) {
+    const st = t.preflight.checks.authority.state;
     pills.push([st === 'pass' ? 'ok' : st === 'fail' ? 'bad' : 'warn',
       st === 'pass' ? 'authority ok' : st === 'fail' ? 'authority fail' : 'authority ?']);
   }
@@ -123,39 +123,88 @@ function rowHtml(t) {
     pills.push([t.holders.topHolderPct > 60 ? 'bad' : 'ok', `top10 ${fmt(t.holders.topHolderPct, 0)}%`]);
   }
   if (t.probeExpired && !t.qualified) pills.push(['mut', 'ingen traktion']);
-  if (t.earlyExits > 2) pills.push(['warn', `${t.earlyExits} tidiga ur`]);
   if (t.migratedAt) pills.push(['info', 'migrerad']);
 
   const p = t.curveProgress;
-  const curve = p === null
-    ? `<div class="curve"><div class="track"></div><span>kurva ?</span></div>`
-    : `<div class="curve"><div class="track"><i class="${p > 0.8 ? 'hi' : ''}" style="width:${(p * 100).toFixed(1)}%"></i></div><span>${(p * 100).toFixed(0)}%</span></div>`;
+  const curve = p === null ? '' :
+    `<div class="curve"><div class="track"><i class="${p > 0.8 ? 'hi' : ''}" style="width:${(p * 100).toFixed(1)}%"></i></div><span>${(p * 100).toFixed(0)}%</span></div>`;
 
+  const thumb = t.meta?.image
+    ? `<span class="thumb"><img src="${esc(t.meta.image)}" alt="" loading="lazy"
+         onerror="this.parentNode.style.background='${a.bg}';this.parentNode.textContent='${esc(a.txt)}'"></span>`
+    : `<span class="thumb" style="background:${a.bg}">${esc(a.txt)}</span>`;
+
+  // pump.fun:s radordning: skapare + ålder, market cap, namn (TICKER), beskrivning.
   return `<button type="button" class="row${fresh ? ' fresh' : ''} ${vcls === 'buy' ? 'is-buy' : vcls === 'skip' ? 'is-skip' : ''}"
       data-mint="${esc(t.mint)}" aria-selected="${t.mint === openMint}">
-    <div class="r1">
-      <span class="vd ${vcls}">${v.verdict}${v.verdict === 'VÄNTA' && v.missing.length ? `<small>${v.missing.length} saknas</small>` : ''}</span>
-      <span class="ava" style="background:${a.bg}">${esc(a.txt)}</span>
-      <span class="tick"><b>$${esc(t.symbol || '?')}</b><span>${esc(t.name || '')}</span></span>
-      <span class="age" data-age="${t.ageSec}">${ageText(t.ageSec)}</span>
-    </div>
-    <div class="reason">${esc(v.reason)}</div>
-    <div class="r2">
-      <span><i>mc</i> <b>${fmt(mc, 1)}</b></span>
-      ${live
-        ? `<span><i>köpare</i> <b>${m.uniqueBuyers}</b>/${m.uniqueSellers}</span>
-           <span><i>netto</i> <b class="${m.netSol > 0 ? 'pos' : m.netSol < 0 ? 'neg' : ''}">${m.netSol >= 0 ? '+' : ''}${fmt(m.netSol, 2)}</b></span>
-           <span><i>tx/s</i> <b>${fmt(m.txPerSec, 2)}</b></span>`
-        : `<span><i>flöde</i> <b>—</b></span>`}
-    </div>
-    ${curve}
-    <div class="pills">${pills.map(([c, l]) => `<span class="pill ${c}">${esc(l)}</span>`).join('')}</div>
-    <div class="acts">
-      <span class="cp" data-copy="${esc(t.mint)}">KOPIERA CA</span>
-      <a class="go ${vcls}" href="https://pump.fun/coin/${esc(t.mint)}" target="_blank" rel="noopener">${
-        v.verdict === 'KÖP' ? 'KÖP NU ↗' : v.verdict === 'SKIPPA' ? 'öppna ändå ↗' : 'öppna ↗'}</a>
-    </div>
+    ${thumb}
+    <span class="body">
+      <span class="by">skapad av <b>${esc((t.creator ?? '?').slice(0, 8))}</b> · <span class="age" data-age="${t.ageSec}">${ageText(t.ageSec)}</span></span>
+      <span class="mcap"><i>market cap</i> ${fmt(mc, 1)} SOL ${live
+        ? `<i>·</i> ${m.uniqueBuyers} köpare <span class="${m.netSol < 0 ? 'neg' : ''}">${m.netSol >= 0 ? '+' : ''}${fmt(m.netSol, 2)}</span>`
+        : '<i>· flöde —</i>'}</span>
+      <span class="title">${esc(t.name || 'namnlös')} <span>(${esc(t.symbol || '?')})</span></span>
+      ${t.meta?.description ? `<span class="desc">${esc(t.meta.description)}</span>` : ''}
+      ${curve}
+      <span class="pills">${pills.map(([c, l]) => `<span class="pill ${c}">${esc(l)}</span>`).join('')}</span>
+      <span class="acts">
+        <span class="cp" data-copy="${esc(t.mint)}">KOPIERA</span>
+        <a class="go ${vcls}" href="https://pump.fun/coin/${esc(t.mint)}" target="_blank" rel="noopener">${
+          v.verdict === 'KÖP' ? 'KÖP NU ↗' : v.verdict === 'SKIPPA' ? 'öppna ändå ↗' : 'öppna ↗'}</a>
+      </span>
+    </span>
+    <span class="vd ${vcls}">${v.verdict}${v.verdict === 'VÄNTA' && v.missing.length ? `<small>${v.missing.length} saknas</small>` : ''}</span>
   </button>`;
+}
+
+/**
+ * Kopiering som fungerar även där clipboard-API:t är avstängt.
+ *
+ * `navigator.clipboard` kräver säker kontext och tillåtelse, och saknas i en
+ * sandlådad iframe. Utan fallback ser knappen ut att fungera medan ingenting
+ * hamnar i urklipp — det värsta felläget, eftersom man klistrar in fel adress
+ * i en handelsapp och märker det först efteråt.
+ */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* faller igenom */ }
+
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Öppnar en länk, och faller tillbaka på att kopiera adressen när
+ * popup-fönster är blockerade (vilket de är i en sandlådad iframe).
+ */
+async function openOrCopy(url, el) {
+  const win = window.open(url, '_blank', 'noopener');
+  if (win) return;
+  const ok = await copyText(url);
+  flash(el, ok ? 'LÄNK KOPIERAD' : 'BLOCKERAD');
+}
+
+function flash(el, text) {
+  if (!el) return;
+  const original = el.textContent;
+  el.textContent = text;
+  el.classList.add('done');
+  setTimeout(() => { el.textContent = original; el.classList.remove('done'); }, 1400);
 }
 
 function bind() {
@@ -167,12 +216,18 @@ function bind() {
       const cp = e.target.closest('[data-copy]');
       if (cp) {
         e.preventDefault();
-        try { await navigator.clipboard.writeText(cp.dataset.copy); } catch { /* nekad */ }
-        cp.classList.add('done'); cp.textContent = 'KOPIERAD';
-        setTimeout(() => { cp.classList.remove('done'); cp.textContent = 'KOPIERA CA'; }, 1200);
+        e.stopPropagation();
+        flash(cp, (await copyText(cp.dataset.copy)) ? 'KOPIERAD' : 'MISSLYCKADES');
         return;
       }
-      if (e.target.closest('a')) return;
+
+      const link = e.target.closest('a');
+      if (link) {
+        e.preventDefault();
+        e.stopPropagation();
+        await openOrCopy(link.href, link);
+        return;
+      }
       openMint = el.dataset.mint;
       refreshDrawer(true);
     });
@@ -279,6 +334,9 @@ async function refreshDrawer(open = false) {
   $('drawer').hidden = false;
   $('scrim').hidden = false;
   $('dclose').addEventListener('click', closeDrawer);
+  $('drawer').querySelectorAll('a[href]').forEach((el) => {
+    el.addEventListener('click', async (ev) => { ev.preventDefault(); await openOrCopy(el.href, el); });
+  });
   if (open) $('drawer').scrollTop = 0;
 }
 

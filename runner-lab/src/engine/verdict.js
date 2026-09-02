@@ -59,8 +59,8 @@ export function verdictFor(row) {
 
   // ---- Vad vi ännu inte vet ----
   const missing = [];
-  if (!pf || pf.state === 'queued' || pf.state === 'running') missing.push('authority-kontroll');
-  else if (pf.checks?.authority?.state === 'unknown') missing.push('authority okänd');
+  if (!pf?.checks?.authority) missing.push('authority-kontroll');
+  else if (pf.checks.authority.state === 'unknown') missing.push('authority okänd');
   if (!holders || holders.unknown) missing.push('innehavarfördelning');
   if (dev === null) missing.push('dev-andel');
   if (!row.tracking && m.totalTrades === 0) missing.push('flöde');

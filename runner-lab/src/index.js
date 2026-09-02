@@ -23,6 +23,14 @@ const radar = new Radar({
     // Lyssna direkt. Kvalificering kräver trades, så en prenumeration som
     // startar först vid kvalificering skulle aldrig kunna starta alls.
     if (stream?.track && stream.track(entry.mint)) entry.tracking = true;
+    // Authority-kontrollen på allt. Det är ett anrop, och utan den fastnar
+    // varje omdöme på VÄNTA.
+    preflight.enqueue(entry, { full: false });
+    // Bild och socials på allt också — det är gratis och det är det som gör
+    // att man slipper öppna pump.fun.
+    fetchTokenMetadata(entry.mint, entry.uri).then((meta) => {
+      if (meta) { entry.meta = meta; dirty = true; }
+    });
     creators.recordLaunch({
       mint: entry.mint, creator: entry.creator, symbol: entry.symbol,
       name: entry.name, ts: entry.launchedAt,
@@ -34,10 +42,7 @@ const radar = new Radar({
     // Först nu är token värd de dyra anropen: on-chain-kontroller och
     // metadata. Att hämta bild och socials för varje listning vore hundratals
     // IPFS-anrop i minuten för tokens ingen kommer titta på.
-    preflight.enqueue(entry);
-    fetchTokenMetadata(entry.mint, entry.uri).then((meta) => {
-      if (meta) { entry.meta = meta; dirty = true; }
-    });
+    preflight.enqueue(entry, { full: true });
     console.log(
       `\x1b[32m[KVALIFICERAD]\x1b[0m ${(entry.symbol || entry.mint.slice(0, 8)).padEnd(12)} ` +
       `${entry.window.metrics().uniqueBuyers} unika köpare · ${entry.mint}`,
@@ -120,7 +125,7 @@ const app = {
   },
 };
 
-const { server, broadcast } = createServer(app);
+const { server, broadcast } = createServer(app, config);
 
 stream = config.source === 'replay'
   ? createReplaySource(handlers)
@@ -141,7 +146,8 @@ setInterval(() => {
 
 server.listen(config.server.port, config.server.host, () => {
   console.log(`\n  RUNNER LAB — ${stream.name}${stream.synthetic ? ' (syntetisk)' : ''}`);
-  console.log(`  http://${config.server.host}:${config.server.port}`);
+  const shown = config.server.host === '0.0.0.0' ? 'localhost' : config.server.host;
+  console.log(`  http://${shown}:${config.server.port}`);
   console.log(`  Arkiv: ${config.store.dir}events/\n`);
 });
 

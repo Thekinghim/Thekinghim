@@ -69,49 +69,54 @@ body:has(.helpbar:not([hidden])) .lanes{height:calc(100vh - 46px - 76px)}
 .list::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
 .lane-empty{padding:34px 14px;text-align:center;color:var(--faint);font-size:12px}
 
-/* ---------- rad ---------- */
-.row{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
-  background:var(--row);border:0;border-bottom:1px solid var(--line);padding:8px 10px}
-.row:hover{background:var(--rowh)}
-.row[aria-selected="true"]{background:var(--rowh);box-shadow:inset 2px 0 0 var(--green)}
+/* ---------- kort (pump.fun-anatomi) ----------
+   Bild till vänster, texten till höger i deras ordning: skapare + ålder,
+   market cap i grönt, namn (TICKER) fetstilt, beskrivning i grått.
+   Grön kontur vid hover, som på pump.fun. */
+.row{display:flex;gap:10px;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  background:var(--row);border:1px solid transparent;border-bottom:1px solid var(--line);
+  padding:10px;transition:border-color .1s ease,background .1s ease}
+.row:hover{background:var(--rowh);border-color:var(--green)}
+.row[aria-selected="true"]{background:var(--rowh);border-color:var(--green)}
 .row.fresh{animation:flash 1.6s ease-out}
 @keyframes flash{from{background:var(--green-s)}to{background:var(--row)}}
 @media(prefers-reduced-motion:reduce){.row.fresh{animation:none}}
+.row.is-skip{opacity:.5}
 
-.r1{display:flex;align-items:center;gap:8px}
-/* Omdömet är radens tyngsta element — det är det man scannar efter. */
-.vd{flex:none;width:62px;text-align:center;border-radius:6px;padding:6px 0;
-  font:800 11px var(--mono);letter-spacing:.06em;line-height:1.1}
-.vd small{display:block;font:9px var(--mono);font-weight:400;opacity:.7;letter-spacing:0}
+.thumb{width:78px;height:78px;border-radius:6px;flex:none;object-fit:cover;
+  background:var(--line);display:grid;place-items:center;
+  font:700 20px var(--mono);color:#06170d;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+
+.body{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.by{font:10.5px var(--mono);color:var(--faint);display:flex;gap:6px;align-items:center}
+.by b{color:var(--dim);font-weight:400}
+.mcap{font:11.5px var(--mono);color:var(--green)}
+.mcap i{font-style:normal;color:var(--faint)}
+.mcap .neg{color:var(--red)}
+.title{font-size:13.5px;font-weight:700;letter-spacing:-.01em;line-height:1.25;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.title span{color:var(--dim);font-weight:400}
+.desc{font-size:11.5px;color:var(--faint);line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* Omdömet ligger i kortets högerkant — det ska scannas, inte läsas. */
+.vd{flex:none;width:56px;align-self:flex-start;text-align:center;border-radius:5px;padding:5px 0;
+  font:800 10px var(--mono);letter-spacing:.05em;line-height:1.15}
+.vd small{display:block;font:8.5px var(--mono);font-weight:400;opacity:.75;letter-spacing:0}
 .vd.buy{background:var(--green);color:#041a0d}
 .vd.wait{background:var(--line);color:var(--dim);box-shadow:inset 0 0 0 1px var(--line2)}
 .vd.skip{background:var(--red-s);color:var(--red);box-shadow:inset 0 0 0 1px var(--red)}
-.row.is-buy{background:linear-gradient(90deg,var(--green-l),var(--row) 38%)}
-.row.is-skip{opacity:.55}
-.reason{font:10px var(--mono);color:var(--faint);margin-top:5px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ava{width:30px;height:30px;border-radius:7px;flex:none;display:grid;place-items:center;
-  font:700 11px var(--mono);color:#06170d}
-.tick{min-width:0;flex:1;display:flex;align-items:baseline;gap:6px}
-.tick b{font:700 13px var(--mono);letter-spacing:-.01em}
-.tick span{color:var(--faint);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.age{font:11px var(--mono);color:var(--dim);flex:none;font-variant-numeric:tabular-nums}
-.age.hot{color:var(--green)}
+.row.is-buy{background:linear-gradient(90deg,var(--green-l),var(--row) 40%)}
 
-.r2{display:flex;align-items:center;gap:9px;margin-top:6px;font:11px var(--mono);
-  color:var(--dim);font-variant-numeric:tabular-nums}
-.r2 i{font-style:normal;color:var(--faint)}
-.r2 b{color:var(--ink);font-weight:500}
-.r2 b.pos{color:var(--green)} .r2 b.neg{color:var(--red)}
-
-.curve{margin-top:6px;display:flex;align-items:center;gap:8px}
-.track{flex:1;height:4px;background:var(--line);border-radius:3px;overflow:hidden}
-.track i{display:block;height:100%;border-radius:3px;background:var(--amber);transition:width .4s ease}
+.curve{margin-top:5px;display:flex;align-items:center;gap:7px}
+.track{flex:1;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.track i{display:block;height:100%;border-radius:2px;background:var(--amber);transition:width .4s ease}
 .track i.hi{background:var(--green)}
-.curve span{font:10px var(--mono);color:var(--faint);flex:none;font-variant-numeric:tabular-nums}
+.curve span{font:9.5px var(--mono);color:var(--faint);flex:none;font-variant-numeric:tabular-nums}
 
-.pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-.pill{font:9.5px var(--mono);padding:2.5px 6px;border-radius:4px;letter-spacing:.04em;white-space:nowrap}
+.pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.pill{font:9.5px var(--mono);padding:2px 5px;border-radius:4px;letter-spacing:.03em;white-space:nowrap}
 .pill.ok{background:var(--green-s);color:var(--green)}
 .pill.warn{background:var(--amber-s);color:var(--amber)}
 .pill.bad{background:var(--red-s);color:var(--red)}
@@ -120,16 +125,13 @@ body:has(.helpbar:not([hidden])) .lanes{height:calc(100vh - 46px - 76px)}
 
 .acts{display:flex;gap:5px;margin-top:7px}
 .acts a,.acts span{flex:1;text-align:center;text-decoration:none;border-radius:5px;padding:5px 6px;
-  font:700 9.5px var(--mono);letter-spacing:.06em;cursor:pointer;border:1px solid transparent}
-.acts .cp{flex:0 0 84px}
-.acts .go{background:var(--green);color:#041a0d}
-/* Knappen följer omdömet. En full grön köpknapp på en rad som säger VÄNTA
-   inbjuder till precis det verktyget nyss avrådde från. */
-.acts .go.wait{background:var(--line);color:var(--dim);border-color:var(--line2)}
-.acts .go.skip{background:transparent;color:var(--faint);border-color:var(--line2)}
-.acts .cp{background:var(--line);color:var(--dim);border-color:var(--line2)}
+  font:700 9.5px var(--mono);letter-spacing:.05em;cursor:pointer;border:1px solid transparent}
+.acts .cp{flex:0 0 76px;background:var(--line);color:var(--dim);border-color:var(--line2)}
 .acts .cp:hover{color:var(--ink)}
 .acts .cp.done{color:var(--green);border-color:var(--green)}
+.acts .go{background:var(--green);color:#041a0d}
+.acts .go.wait{background:var(--line);color:var(--dim);border-color:var(--line2)}
+.acts .go.skip{background:transparent;color:var(--faint);border-color:var(--line2)}
 
 /* ---------- lådan ---------- */
 .scrim{position:fixed;inset:0;background:#000a;z-index:30}

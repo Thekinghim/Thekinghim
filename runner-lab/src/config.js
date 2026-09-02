@@ -3,8 +3,23 @@ export const config = {
   recordOnly: process.env.RECORD_ONLY === '1',
 
   server: {
+    // Hostingplattformar sätter PORT själva och kräver att man binder 0.0.0.0.
     port: Number(process.env.PORT ?? 4173),
-    host: process.env.HOST ?? '127.0.0.1',
+    host: process.env.HOST ?? '0.0.0.0',
+    /**
+     * Tak för samtidiga SSE-klienter. Varje klient är en öppen anslutning;
+     * utan tak tar en trafiktopp ner processen i stället för att avvisa
+     * någon enstaka besökare.
+     */
+    maxClients: Number(process.env.MAX_CLIENTS ?? 400),
+    /**
+     * Hur ofta en kommentar skickas på tysta SSE-anslutningar.
+     *
+     * Bakom en hostingproxy stängs annars anslutningar som varit tysta i
+     * 30–60 sekunder, och klienten ser det som ett nätverksfel den återansluter
+     * efter. Med en puls hålls anslutningen vid liv.
+     */
+    keepAliveMs: Number(process.env.KEEPALIVE_MS ?? 20_000),
   },
 
   pumpportal: {
