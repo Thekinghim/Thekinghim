@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runner Lab</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2300d95f'/><text x='16' y='23' font-size='18' font-family='monospace' font-weight='bold' text-anchor='middle' fill='%2306180e'>R</text></svg>">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="mark">R</span><b>RUNNER LAB</b><em>early-market intelligence</em></div>
+    <div class="status">
+      <span class="dot" id="dot"></span><span id="state">ansluter</span>
+      <span class="sep">·</span><span id="latency">— ms</span>
+    </div>
+    <div class="pill" id="source">—</div>
+    <div class="pill" id="window">—</div>
+  </header>
+
+  <div class="lookup">
+    <input id="ca" type="text" placeholder="Klistra in Solana CA…" spellcheck="false" autocomplete="off">
+    <button id="analyze" type="button">ANALYSERA</button>
+    <span class="updated" id="updated"></span>
+  </div>
+
+  <div class="strip" id="strip"></div>
+
+  <main>
+    <section class="feed">
+      <div class="feed-head">
+        <h2>Tidiga coins</h2>
+        <span class="sub" id="feedsub"></span>
+        <div class="tabs">
+          <button type="button" data-f="all" aria-pressed="true">alla</button>
+          <button type="button" data-f="qualified" aria-pressed="false">kvalificerade</button>
+          <button type="button" data-f="flow" aria-pressed="false">har flöde</button>
+        </div>
+      </div>
+      <div class="cards" id="cards"></div>
+      <p class="empty" id="empty">Väntar på första listningen…</p>
+    </section>
+
+    <aside id="side"></aside>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+import { TokenWindow } from './windows.js';
+import { config } from '../config.js';
+
+/**
+ * Radarn: håller varje ny mint i fönstret, uppdaterar mått från trades och
+ * avgör vilka som förtjänar de dyra kontrollerna (RPC-uppslag, holder-analys).
+ *
+ * Kvalificering är inte ett köpråd. Den svarar på en enda fråga: har den här
+ * token tillräckligt med riktig aktivitet för att det ska vara värt att
+ * spendera nätverksanrop på? Ett köpbeslut kräver kontrollerna som körs
+ * efteråt, och tills de är klara säger radarn ingenting om risk.
+ */
+export class Radar {
+  constructor(handlers = {}) {
+    this.handlers = handlers;
+    /** @type {Map<string, any>} */
+    this.tokens = new Map();
+    this.counters = { launches: 0, trades: 0, qualified: 0, migrations: 0, dropped: 0 };
+  }
+
+  /** @param {*} raw PumpPortal create-event. */
+  onLaunch(raw) {
+    if (!raw?.mint || this.tokens.has(raw.mint)) return null;
+    this.counters.launches++;
+
+    const entry = {
+      mint: raw.mint,
+      name: raw.name ?? '',
+      symbol: raw.symbol ?? '',
+      creator: raw.traderPublicKey ?? null,
+      uri: raw.uri ?? null,
+      launchedAt: Date.now(),
+      launchMarketCapSol: Number(raw.marketCapSol ?? 0),
+      creatorInitialSol: Number(raw.solAmount ?? 0),
+      creatorInitialTokens: Number(raw.initialBuy ?? 0),
+      vTokens: Number(raw.vTokensInBondingCurve ?? 0),
+      window: new TokenWindow(raw.mint, config.radar.rollingMs),
+      qualified: false,
+      tracking: false,
+      migratedAt: null,
+      preflight: null,
+      holders: null,
+    };
+    this.tokens.set(raw.mint, entry);
+    this.handlers.onNew?.(entry);
+    return entry;
+  }
+
+  /** @param {*} raw PumpPortal buy/sell-event. */
+  onTrade(raw) {
+    const entry = this.tokens.get(raw?.mint);
+    if (!entry) return;
+    this.counters.trades++;
+
+    entry.window.add({
+      ts: Date.now(),
+      side: raw.txType,
+      sol: Number(raw.solAmount ?? 0),
+      wallet: raw.traderPublicKey ?? 'okänd',
+      marketCapSol: Number(raw.marketCapSol ?? 0),
+    });
+
+    if (!entry.qualified) {
+      const m = entry.window.metrics();
+      if (m.uniqueBuyers >= config.radar.minUniqueBuyers && m.netSol > 0) {
+        entry.qualified = true;
+        this.counters.qualified++;
+        this.handlers.onQualified?.(entry);
+      }
+    }
+  }
+
+  onMigration(raw) {
+    this.counters.migrations++;
+    const entry = this.tokens.get(raw?.mint);
+    if (entry) {
+      entry.migratedAt = Date.now();
+      this.handlers.onMigration?.(entry);
+    }
+    return entry;
+  }
+
+  /**
+   * Andel av supplyn skaparen tog i samma transaktion som skapandet.
+   * Returnerar null när fälten saknas — okänt är inte noll.
+   */
+  static creatorOpeningShare(entry) {
+    const total = entry.creatorInitialTokens + entry.vTokens;
+    if (!(total > 0)) return null;
+    return (entry.creatorInitialTokens / total) * 100;
+  }
+
+  /** Släpper tokens som fallit ur fönstret. Returnerar mints att avprenumerera. */
+  evict(now = Date.now()) {
+    const maxAge = config.radar.windowMinutes * 60_000;
+    const released = [];
+    for (const [mint, entry] of this.tokens) {
+      if (now - entry.launchedAt <= maxAge) continue;
+      // Migrerade tokens behålls längre — de är utfallsdata.
+      if (entry.migratedAt && now - entry.migratedAt < 3600_000) continue;
+      this.tokens.delete(mint);
+      this.counters.dropped++;
+      if (entry.tracking) released.push(mint);
+    }
+    return released;
+  }
+
+  /** Kandidater i fönstret, mest aktiva först. */
+  board(limit = 60) {
+    const now = Date.now();
+    const rows = [];
+    for (const entry of this.tokens.values()) {
+      rows.push({
+        mint: entry.mint,
+        name: entry.name,
+        symbol: entry.symbol,
+        creator: entry.creator,
+        ageSec: Math.round((now - entry.launchedAt) / 1000),
+        launchMarketCapSol: entry.launchMarketCapSol,
+        creatorInitialSol: entry.creatorInitialSol,
+        creatorOpeningShare: Radar.creatorOpeningShare(entry),
+        qualified: entry.qualified,
+        tracking: entry.tracking,
+        migratedAt: entry.migratedAt,
+        preflight: entry.preflight,
+        holders: entry.holders,
+        earlyExits: entry.window.earlyBuyersExited(),
+        // Kvalificering är klibbig — anropen är redan spenderade och ska inte
+        // spenderas om. Men ett flöde som vänt måste synas, annars ser en
+        // token som dumpas fortfarande ut som en kandidat.
+        flowReversed: entry.qualified && entry.window.metrics(now).netSol < 0,
+        metrics: entry.window.metrics(now),
+      });
+    }
+    rows.sort((a, b) => {
+      if (a.qualified !== b.qualified) return a.qualified ? -1 : 1;
+      if (b.metrics.uniqueBuyers !== a.metrics.uniqueBuyers) {
+        return b.metrics.uniqueBuyers - a.metrics.uniqueBuyers;
+      }
+      return a.ageSec - b.ageSec;
+    });
+    return rows.slice(0, limit);
+  }
+}
