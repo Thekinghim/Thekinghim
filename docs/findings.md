@@ -76,3 +76,52 @@ Konsekvens för en produkt som ska säljas:
 
 Det är en ren separation och den kostar ingenting så länge den görs från
 början: forskningen bevisar att signalen finns, produkten står på egen data.
+
+## Creator-recidivism går inte att testa på publik MELT-data (2026-09-02)
+
+`memecoin_list.jsonl` har ett `creator`-fält, men det är **en enda konstant
+adress** (`39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg`) på alla 46 139 rader.
+Det är inte token-skaparen. Den riktiga deployern finns bara i
+launchtransaktionen, alltså i `pre_migration_tx.zip` på Drive.
+
+Konsekvens: H1 kan inte ens golv-testas på det publika datasetet. Ett första
+försök gav skenbart meningsfulla siffror innan konstanten upptäcktes — de
+siffrorna är kasserade.
+
+**Men samma fält finns gratis i realtid.** PumpPortals `subscribeNewToken`
+(`wss://pumpportal.fun/api/data`, ingen nyckel) levererar creator-walleten på
+varje launch. Det gör creator-historik till något man bygger själv genom att
+spela in strömmen, inte något man hämtar. Implementerat i
+`packages/entity/creators.js`, med graduation som utfallsmått eftersom det är
+binärt, sällsynt och syns i samma gratisström.
+
+Det här är också produktens enda beståndsdel en konkurrent inte kan
+replikera på en eftermiddag, och skälet till att PLAN.md:s arkiveringskrav
+gäller från första commiten.
+
+## Socials vid launch — ingen användbar signal (2026-09-02)
+
+| socials | n | high-risk | median return |
+|---|---|---|---|
+| 0 | 6 171 | 72,4 % | −52,2 % |
+| 1 | 7 986 | 78,6 % | −69,6 % |
+| 2 | 8 188 | 83,1 % | −74,8 % |
+| 3 | 4 651 | 77,8 % | −58,2 % |
+
+Inget monotont samband, och medianen är djupt negativ i varje hink. Negativt
+resultat, redovisat.
+
+**Rättelse:** en första körning visade 88,1 % high-risk för "0 socials" och såg
+ut som en signal. Den siffran kom av att tokens *utan metadata* räknades som
+"inga socials". Saknat värde behandlat som noll — exakt det fel `normalizeToken`
+i den andra kodbasen finns för att undvika. Tabellen ovan är beräknad enbart på
+de 26 996 tokens där metadata faktiskt finns.
+
+## Runners är ofta högrisk
+
+Bland de 200 största avkastningarna i datasetet är **86 klassade `high`**. Ett
+rent riskfilter hade alltså sållat bort 43 % av de största vinnarna.
+
+Det är den viktigaste produktinsikten hittills: MELT:s modell förutsäger
+*risk*, inte *avkastning*, och de två är inte varandras motsatser. Ett verktyg
+som säljs på att "hitta runners" kan inte bara vara ett rugfilter.
