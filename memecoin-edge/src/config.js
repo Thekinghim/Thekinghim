@@ -80,3 +80,30 @@ export const config = {
     roundTripCostPct: Number(process.env.ROUND_TRIP_COST_PCT ?? 3.5),
   },
 };
+
+/**
+ * Konfiguration för live-läget mot riktiga, nyckelfria API:er.
+ * Intervallen ligger med marginal under leverantörernas minuttak.
+ */
+export const liveConfig = {
+  pollTokensMs: Number(process.env.POLL_TOKENS_MS ?? 6_000),
+  pollAttentionMs: Number(process.env.POLL_ATTENTION_MS ?? 25_000),
+  /** Hur ofta öppna journalpositioner prisuppdateras. */
+  pollMarksMs: Number(process.env.POLL_MARKS_MS ?? 30_000),
+  /** Hur ofta kalibreringen räknas om. Dyr, och ändras långsamt. */
+  recalibrateMs: 5 * 60_000,
+
+  journal: {
+    dir: process.env.DATA_DIR ?? new URL('../data/', import.meta.url).pathname,
+    horizons: [15 * 60_000, 60 * 60_000, 4 * 3600_000, 24 * 3600_000],
+    horizonLabels: ['15m', '1h', '4h', '24h'],
+    roundTripCostPct: Number(process.env.ROUND_TRIP_COST_PCT ?? 3.5),
+  },
+
+  /**
+   * Andel av avvisade-men-godkända-genom-grindarna som hamnar i
+   * kontrollgruppen. Alla behövs inte — det räcker med ett stickprov för
+   * att jämförelsen ska bli meningsfull, och varje position kostar anrop.
+   */
+  controlSampleRate: 0.25,
+};

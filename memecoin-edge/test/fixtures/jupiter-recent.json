@@ -1,0 +1,176 @@
+[
+  {
+    "id": "EarLyTokenMint1111111111111111111111111111",
+    "name": "Early Traction",
+    "symbol": "EARLY",
+    "decimals": 6,
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "firstPool": { "id": "pool1", "createdAt": "2026-09-02T07:00:00Z" },
+    "holderCount": 640,
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 21.4,
+      "devBalancePercentage": 1.1,
+      "lpBurnedPercentage": 100
+    },
+    "organicScore": 74.5,
+    "organicScoreLabel": "high",
+    "isVerified": false,
+    "usdPrice": 0.00042,
+    "liquidity": 38000,
+    "fdv": 420000,
+    "stats5m": {
+      "priceChange": 11.2,
+      "holderChange": 58,
+      "liquidityChange": 9.1,
+      "buyVolume": 24000,
+      "sellVolume": 9000,
+      "buyOrganicVolume": 19500,
+      "sellOrganicVolume": 7200,
+      "numBuys": 210,
+      "numSells": 88,
+      "numTraders": 240,
+      "numOrganicBuyers": 38,
+      "numNetBuyers": 29
+    },
+    "stats1h": {
+      "priceChange": 26.0,
+      "holderChange": 190,
+      "buyVolume": 96000,
+      "sellVolume": 54000,
+      "buyOrganicVolume": 61000,
+      "sellOrganicVolume": 33000,
+      "numBuys": 720,
+      "numSells": 410,
+      "numTraders": 830,
+      "numOrganicBuyers": 132,
+      "numNetBuyers": 71
+    }
+  },
+  {
+    "id": "ExitLiqTokenMint22222222222222222222222222",
+    "name": "Boosted Nothing",
+    "symbol": "EXIT",
+    "decimals": 6,
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "firstPool": { "id": "pool2", "createdAt": "2026-09-02T04:00:00Z" },
+    "holderCount": 2100,
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 28.0,
+      "devBalancePercentage": 2.0,
+      "lpBurnedPercentage": 100
+    },
+    "organicScore": 12.1,
+    "organicScoreLabel": "low",
+    "isVerified": false,
+    "usdPrice": 0.0011,
+    "liquidity": 61000,
+    "fdv": 1100000,
+    "stats5m": {
+      "priceChange": -2.1,
+      "holderChange": 3,
+      "buyVolume": 41000,
+      "sellVolume": 44000,
+      "buyOrganicVolume": 1800,
+      "sellOrganicVolume": 5200,
+      "numBuys": 190,
+      "numSells": 205,
+      "numTraders": 96,
+      "numOrganicBuyers": 4,
+      "numNetBuyers": -6
+    },
+    "stats1h": {
+      "priceChange": -8.0,
+      "holderChange": 20,
+      "buyVolume": 480000,
+      "sellVolume": 505000,
+      "buyOrganicVolume": 21000,
+      "sellOrganicVolume": 39000,
+      "numBuys": 2200,
+      "numSells": 2350,
+      "numTraders": 700,
+      "numOrganicBuyers": 51,
+      "numNetBuyers": -40
+    }
+  },
+  {
+    "id": "MintAuthTokenMint333333333333333333333333",
+    "name": "Mint Open",
+    "symbol": "RUGME",
+    "decimals": 6,
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "firstPool": { "id": "pool3", "createdAt": "2026-09-02T07:20:00Z" },
+    "holderCount": 410,
+    "audit": {
+      "mintAuthorityDisabled": false,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 19.0,
+      "lpBurnedPercentage": 100
+    },
+    "organicScore": 68.0,
+    "isVerified": false,
+    "usdPrice": 0.00031,
+    "liquidity": 44000,
+    "stats5m": {
+      "buyVolume": 30000, "sellVolume": 8000,
+      "buyOrganicVolume": 26000, "sellOrganicVolume": 6000,
+      "numBuys": 240, "numSells": 70, "numTraders": 260,
+      "numOrganicBuyers": 52, "numNetBuyers": 44, "holderChange": 70
+    },
+    "stats1h": {
+      "numBuys": 600, "numSells": 200, "numOrganicBuyers": 120,
+      "numNetBuyers": 80, "holderChange": 200,
+      "buyOrganicVolume": 50000, "sellOrganicVolume": 20000
+    }
+  },
+  {
+    "id": "MissingDataMint44444444444444444444444444",
+    "name": "No Audit Data",
+    "symbol": "UNKNOWN",
+    "decimals": 6,
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "firstPool": { "id": "pool4", "createdAt": "2026-09-02T07:25:00Z" },
+    "holderCount": 300,
+    "audit": {},
+    "isVerified": false,
+    "usdPrice": 0.00002,
+    "liquidity": 30000,
+    "stats5m": {},
+    "stats1h": {}
+  },
+  {
+    "id": "CrowdedTokenMint5555555555555555555555555",
+    "name": "Everyone Sees It",
+    "symbol": "CROWD",
+    "decimals": 6,
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "firstPool": { "id": "pool5", "createdAt": "2026-09-02T02:00:00Z" },
+    "holderCount": 9400,
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 24.0,
+      "lpBurnedPercentage": 100
+    },
+    "organicScore": 66.0,
+    "isVerified": true,
+    "usdPrice": 0.0089,
+    "liquidity": 320000,
+    "stats5m": {
+      "buyVolume": 90000, "sellVolume": 70000,
+      "buyOrganicVolume": 61000, "sellOrganicVolume": 44000,
+      "numBuys": 520, "numSells": 430, "numTraders": 700,
+      "numOrganicBuyers": 44, "numNetBuyers": 26, "holderChange": 120
+    },
+    "stats1h": {
+      "numBuys": 4200, "numSells": 3900, "numOrganicBuyers": 380,
+      "numNetBuyers": 140, "holderChange": 900,
+      "buyOrganicVolume": 500000, "sellOrganicVolume": 430000
+    }
+  }
+]

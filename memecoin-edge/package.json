@@ -7,6 +7,9 @@
   "engines": { "node": ">=20.11" },
   "scripts": {
     "start": "node src/index.js",
+    "sim": "MODE=sim node src/index.js",
+    "doctor": "node src/doctor.js",
+    "preview": "node src/preview.js",
     "backtest": "node src/backtest.js",
     "test": "node --test"
   }

@@ -18,7 +18,7 @@ const MIME = {
  * av sig självt när nätet glappar. En WebSocket hade krävt egen
  * reconnect-logik för exakt ingen vinst här.
  */
-export function createServer(pipeline, cfg) {
+export function createServer(engine, cfg) {
   /** @type {Set<http.ServerResponse>} */
   const clients = new Set();
 
@@ -47,15 +47,14 @@ export function createServer(pipeline, cfg) {
         'X-Accel-Buffering': 'no',
       });
       clients.add(res);
-      send(res, 'snapshot', { candidates: pipeline.candidates(), stats: pipeline.stats(), config: publicConfig(cfg) });
+      send(res, 'snapshot', { board: engine.board(), stats: engine.stats(), config: publicConfig(cfg, engine.mode) });
       req.on('close', () => clients.delete(res));
       return;
     }
 
-    if (url.pathname === '/api/candidates') return json(res, pipeline.candidates());
-    if (url.pathname === '/api/stats') return json(res, pipeline.stats());
-    if (url.pathname === '/api/positions') return json(res, pipeline.ledger.recent(40));
-    if (url.pathname === '/api/config') return json(res, publicConfig(cfg));
+    if (url.pathname === '/api/board') return json(res, engine.board());
+    if (url.pathname === '/api/stats') return json(res, engine.stats());
+    if (url.pathname === '/api/config') return json(res, publicConfig(cfg, engine.mode));
 
     // Statisk servering. Normaliserar bort ".." så att sökvägen inte kan
     // ta sig ur web/-katalogen.
@@ -84,13 +83,10 @@ function json(res, body) {
 }
 
 /** Bara de trösklar gränssnittet behöver visa. */
-function publicConfig(cfg) {
+function publicConfig(cfg, mode) {
   return {
-    source: cfg.source,
-    maxRisk: cfg.risk.maxScore,
-    minMomentum: cfg.momentum.minScore,
-    maxAgeMinutes: cfg.alert.maxAgeMinutes,
-    horizonLabels: cfg.paper.horizonLabels,
-    roundTripCostPct: cfg.paper.roundTripCostPct,
+    mode,
+    horizonLabels: cfg.live?.journal.horizonLabels ?? cfg.paper.horizonLabels,
+    roundTripCostPct: cfg.live?.journal.roundTripCostPct ?? cfg.paper.roundTripCostPct,
   };
 }
