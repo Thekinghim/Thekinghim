@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>memecoin-edge</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🛡️</text></svg>">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>memecoin<span>-edge</span></h1>
+      <span class="source" id="source">ansluter…</span>
+    </div>
+    <div class="thresholds" id="thresholds"></div>
+    <div class="conn" id="conn" data-state="connecting">live</div>
+  </header>
+
+  <main>
+    <section class="feed">
+      <div class="section-head">
+        <h2>Kandidater</h2>
+        <p>Endast tokens som klarat samtliga hårda grindar. Larm överst.</p>
+      </div>
+      <div id="candidates" class="cards"></div>
+      <p class="empty" id="empty">Väntar på första poolen…</p>
+    </section>
+
+    <aside>
+      <section class="panel">
+        <h2>Tratten</h2>
+        <div id="funnel" class="funnel"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Vilken grind som fäller</h2>
+        <div id="gates" class="bars"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Paper-resultat</h2>
+        <p class="hint">Larm mot kontrollgrupp: tokens som klarade grindarna men inte tröskeln. Netto efter handelskostnad.</p>
+        <div id="paper"></div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
