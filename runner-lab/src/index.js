@@ -7,6 +7,7 @@ import { Radar } from './engine/radar.js';
 import { CreatorRegistry } from './engine/creators.js';
 import { PreflightQueue } from './chain/preflight.js';
 import { readMintAuthorities, readTopHolders } from './chain/rpc.js';
+import { fetchTokenMetadata, metadataStats } from './chain/metadata.js';
 
 const store = new EventStore(config.store);
 const creators = new CreatorRegistry({ dir: config.store.dir });
@@ -19,6 +20,9 @@ const preflight = new PreflightQueue({ onUpdate: () => { dirty = true; } });
 
 const radar = new Radar({
   onNew: (entry) => {
+    // Lyssna direkt. Kvalificering kräver trades, så en prenumeration som
+    // startar först vid kvalificering skulle aldrig kunna starta alls.
+    if (stream?.track && stream.track(entry.mint)) entry.tracking = true;
     creators.recordLaunch({
       mint: entry.mint, creator: entry.creator, symbol: entry.symbol,
       name: entry.name, ts: entry.launchedAt,
@@ -27,9 +31,13 @@ const radar = new Radar({
     dirty = true;
   },
   onQualified: (entry) => {
-    // Först nu är token värd nätverksanrop: trades och on-chain-kontroller.
-    if (stream?.track && stream.track(entry.mint)) entry.tracking = true;
+    // Först nu är token värd de dyra anropen: on-chain-kontroller och
+    // metadata. Att hämta bild och socials för varje listning vore hundratals
+    // IPFS-anrop i minuten för tokens ingen kommer titta på.
     preflight.enqueue(entry);
+    fetchTokenMetadata(entry.mint, entry.uri).then((meta) => {
+      if (meta) { entry.meta = meta; dirty = true; }
+    });
     console.log(
       `\x1b[32m[KVALIFICERAD]\x1b[0m ${(entry.symbol || entry.mint.slice(0, 8)).padEnd(12)} ` +
       `${entry.window.metrics().uniqueBuyers} unika köpare · ${entry.mint}`,
@@ -58,17 +66,36 @@ const handlers = {
 const app = {
   snapshot() {
     return {
-      status: { ...status, source: stream?.name ?? config.source, synthetic: stream?.synthetic === true },
+      status: { ...status, source: stream?.name ?? config.source, empty: stream?.empty === true },
       board: radar.board(),
       counters: radar.counters,
       store: store.stats(),
       preflight: preflight.stats(),
       creators: creators.stats(),
+      metadata: metadataStats(),
       config: {
         windowMinutes: config.radar.windowMinutes,
         minUniqueBuyers: config.radar.minUniqueBuyers,
         maxTracked: config.pumpportal.maxTrackedMints,
       },
+    };
+  },
+
+  /** Allt om en mint: tape, serie, metadata, kontroller. */
+  async detail(mint) {
+    const entry = radar.tokens.get(mint);
+    if (!entry) return null;
+    if (!entry.meta && entry.uri) {
+      entry.meta = await fetchTokenMetadata(mint, entry.uri);
+    }
+    const row = radar.board(500).find((r) => r.mint === mint) ?? null;
+    return {
+      ...row,
+      meta: entry.meta ?? null,
+      tape: entry.window.tape,
+      series: entry.window.series,
+      reputation: entry.creator ? creators.reputationAt(entry.creator) : null,
+      baseRate: creators.baseRate(),
     };
   },
 
@@ -104,8 +131,8 @@ stream.start();
 // Push på egen takt. Ett svar kan innehålla hundratals händelser per sekund
 // och en sändning per händelse gör klienten obrukbar.
 setInterval(() => {
-  const released = radar.evict();
-  for (const mint of released) stream.untrack?.(mint);
+  const { release } = radar.evict();
+  for (const mint of release) stream.untrack?.(mint);
   if (!dirty) return;
   dirty = false;
   status.tracked = stream.tracked?.size ?? 0;

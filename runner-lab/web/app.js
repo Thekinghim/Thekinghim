@@ -1,34 +1,50 @@
 /**
- * Runner Lab — klient.
+ * Runner Lab — terminal.
  *
- * Tar emot hela ögonblicksbilden över SSE en gång per sekund. Servern
- * aggregerar redan, så klienten behöver inte hålla egen händelsehistorik;
- * det gör att en flik som legat i bakgrunden aldrig visar gammal data.
+ * Tre kolumner efter pump.fun:s livscykel. Servern skickar hela
+ * ögonblicksbilden en gång per sekund; klienten håller ingen egen historik,
+ * så en flik som legat i bakgrunden visar aldrig gammal data.
+ *
+ * Åldrarna tickar lokalt mellan sändningarna. Utan det ser terminalen
+ * frusen ut en sekund i taget, vilket är det första man reagerar på.
  */
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let snap = null;
-let selected = null;
-let filter = 'all';
-let lastFrameAt = 0;
-let lookupResult = null;
+const LANES = [
+  { id: 'new', label: 'Nya listningar', empty: 'Väntar på första listningen…' },
+  { id: 'completing', label: 'Fyller kurvan', empty: 'Ingen över halva kurvan.' },
+  { id: 'migrated', label: 'Migrerade', empty: 'Ingen migration ännu.' },
+];
+const SORTS = [
+  { id: 'age', label: 'ny', cmp: (a, b) => a.ageSec - b.ageSec },
+  { id: 'buyers', label: 'köpare', cmp: (a, b) => b.metrics.uniqueBuyers - a.metrics.uniqueBuyers },
+  { id: 'mc', label: 'mc', cmp: (a, b) => (b.metrics.marketCapSol || b.launchMarketCapSol) - (a.metrics.marketCapSol || a.launchMarketCapSol) },
+];
 
-const sol = (n) => `${(+n || 0).toFixed(n >= 100 ? 0 : 2)} SOL`;
-const age = (s) => (s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${(s / 3600).toFixed(1)}h`);
+let snap = null;
+let sortBy = { new: 'age', completing: 'mc', migrated: 'age' };
+let query = '';
+let openMint = null;
+let seen = new Set();
+let lastPush = 0;
+
+const fmt = (n, d = 1) => (+n || 0).toFixed(d);
+const ageText = (s) => (s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`);
 
 function avatar(mint, symbol) {
   let h = 0;
   for (let i = 0; i < mint.length; i++) h = (h * 31 + mint.charCodeAt(i)) >>> 0;
-  return { bg: `hsl(${h % 360} 58% 60%)`, txt: (symbol || mint).slice(0, 2).toUpperCase() };
+  return { bg: `hsl(${h % 360} 55% 58%)`, txt: (symbol || mint).slice(0, 2).toUpperCase() };
 }
 
+/* ---------- ström ---------- */
 const stream = new EventSource('/api/stream');
 stream.addEventListener('snapshot', (e) => {
   const now = performance.now();
-  if (lastFrameAt) $('latency').textContent = `${Math.round(now - lastFrameAt)} ms`;
-  lastFrameAt = now;
+  if (lastPush) $('lat').textContent = `${Math.round(now - lastPush)}ms`;
+  lastPush = now;
   snap = JSON.parse(e.data);
   render();
 });
@@ -37,204 +53,277 @@ stream.addEventListener('error', () => {
   $('state').textContent = 'frånkopplad';
 });
 
+/* ---------- rendering ---------- */
 function render() {
   if (!snap) return;
   const s = snap.status;
-
   $('dot').dataset.live = s.state === 'live' || s.state === 'replay' ? '1' : '';
-  $('state').textContent = s.synthetic ? 'SYNTETISK DATA' : s.state === 'live' ? 'LIVE' : s.state;
-  $('source').textContent = s.synthetic ? 'syntetisk ström' : `källa: ${s.source}`;
-  $('window').textContent = `fönster ${snap.config.windowMinutes} min · spårar ${s.tracked ?? 0}/${snap.config.maxTracked}`;
-  $('updated').textContent = `uppdaterad ${new Date().toLocaleTimeString('sv-SE')}`;
+  $('state').textContent = s.state === 'live' ? 'LIVE' : s.state;
+  $('mL').textContent = snap.counters.launches;
+  $('mT').textContent = snap.counters.trades;
+  $('mA').textContent = snap.store.written;
+  $('mS').textContent = `${s.tracked ?? 0}/${snap.config.maxTracked}`;
 
-  renderStrip();
-  renderCards();
-  renderSide();
-}
+  const q = query.toLowerCase();
+  const match = (t) => !q ||
+    t.mint.toLowerCase().includes(q) ||
+    (t.symbol ?? '').toLowerCase().includes(q) ||
+    (t.name ?? '').toLowerCase().includes(q);
 
-function renderStrip() {
-  const c = snap.counters, p = snap.preflight, st = snap.store, cr = snap.creators;
-  const rows = [
-    ['Listningar sedda', c.launches, '', `${c.dropped} har fallit ur fönstret`],
-    ['Trade-event', c.trades, c.trades > 0 ? 'good' : 'warn', c.trades === 0 ? 'inga spårade mints ännu' : 'från spårade mints'],
-    ['Kvalificerade', c.qualified, c.qualified ? 'good' : '', `≥ ${snap.config.minUniqueBuyers} unika köpare`],
-    ['Arkiverade event', st.written, '', `${st.duplicates} dubbletter kastade`],
-    ['Preflight', `${p.done}/${p.done + p.queued + p.running}`, p.unknown ? 'warn' : 'good',
-      `${p.failed} fällda · ${p.unknown} okända`],
-    ['Migrationer', c.migrations, c.migrations ? 'good' : '', 'bonding curve fylld'],
-    ['Creator-register', cr.launches, '', `${cr.repeatCreators} återkommande`],
-  ];
-  $('strip').innerHTML = rows.map(([k, v, cls, sub]) =>
-    `<div class="stat"><span>${k}</span><b class="${cls}">${v}</b><i>${sub}</i></div>`).join('');
-}
-
-function renderCards() {
-  const board = snap.board.filter((t) =>
-    filter === 'all' ||
-    (filter === 'qualified' && t.qualified) ||
-    (filter === 'flow' && t.metrics.trades > 0));
-
-  $('feedsub').textContent =
-    `${snap.board.length} i fönstret · ${snap.board.filter((t) => t.qualified).length} kvalificerade`;
-  $('empty').hidden = board.length > 0;
-  if (selected === null && board.length) selected = board[0].mint;
-
-  $('cards').innerHTML = board.map((t) => {
-    const a = avatar(t.mint, t.symbol);
-    const m = t.metrics;
-    const share = t.creatorOpeningShare;
-
-    const tags = [];
-    if (t.qualified) tags.push(['ok', 'kvalificerad']);
-    if (t.migratedAt) tags.push(['ok', 'migrerad']);
-    if (!t.tracking && !t.qualified) tags.push(['mut', 'ej spårad']);
-    if (share !== null && share > 12) tags.push(['bad', `dev tog ${share.toFixed(0)} %`]);
-    else if (share !== null) tags.push(['mut', `dev ${share.toFixed(1)} %`]);
-    if (t.preflight) {
-      const st = t.preflight.state;
-      tags.push([st === 'pass' ? 'ok' : st === 'fail' ? 'bad' : 'warn', `preflight ${st}`]);
-    }
-    if (t.flowReversed) tags.push(['bad', 'flödet vänt']);
-    if (t.earlyExits > 2) tags.push(['warn', `${t.earlyExits} tidiga ur`]);
-
-    return `<button type="button" class="card ${t.qualified ? 'qualified' : ''}" data-mint="${esc(t.mint)}"
-        aria-selected="${t.mint === selected}">
-      <div class="chead">
-        <span class="ava" style="background:${a.bg}">${esc(a.txt)}</span>
-        <span class="cid">
-          <div class="cname">${esc(t.name || t.symbol || 'namnlös')}</div>
-          <div class="cticker">$${esc(t.symbol || '?')}</div>
-        </span>
-        <span class="cage">${age(t.ageSec)}</span>
+  $('lanes').innerHTML = LANES.map((lane) => {
+    const rows = snap.board.filter((t) => t.lane === lane.id && match(t));
+    const rank = { 'KÖP': 0, 'VÄNTA': 1, 'SKIPPA': 2 };
+    const inner = SORTS.find((s) => s.id === sortBy[lane.id]).cmp;
+    // Omdömet går före vald sortering: ett KÖP får aldrig hamna under
+    // trettio rader man ändå ska skippa.
+    rows.sort((a, b) => (rank[a.verdict?.verdict ?? 'VÄNTA'] - rank[b.verdict?.verdict ?? 'VÄNTA']) || inner(a, b));
+    return `<section class="lane" data-lane="${lane.id}">
+      <div class="lane-head">
+        <h2>${lane.label}</h2><span class="n">${rows.length}</span>
+        <div class="sorts">${SORTS.map((s) =>
+          `<button type="button" data-lane="${lane.id}" data-sort="${s.id}"
+             aria-pressed="${sortBy[lane.id] === s.id}">${s.label}</button>`).join('')}</div>
       </div>
-      <div class="mint">${esc(t.mint)}</div>
-      <div class="tags">${tags.map(([c, l]) => `<span class="tag ${c}">${esc(l)}</span>`).join('')}</div>
-      <div class="metrics">
-        <div><span>unika köpare 60s</span><b class="${m.uniqueBuyers ? 'good' : 'mut'}">${m.uniqueBuyers}</b></div>
-        <div><span>tx/sek</span><b class="${m.txPerSec ? '' : 'mut'}">${m.txPerSec.toFixed(2)}</b></div>
-        <div><span>netto 60s</span><b class="${m.netSol > 0 ? 'good' : m.netSol < 0 ? 'bad' : 'mut'}">${m.netSol >= 0 ? '+' : ''}${m.netSol.toFixed(2)}</b></div>
-        <div><span>market cap</span><b>${(m.marketCapSol || t.launchMarketCapSol).toFixed(1)}</b></div>
-      </div>
-      <span class="buy" data-href="https://pump.fun/coin/${esc(t.mint)}">KÖP PÅ PUMP.FUN ↗</span>
-    </button>`;
+      <div class="list">${rows.length
+        ? rows.map(rowHtml).join('')
+        : `<p class="lane-empty">${esc(snap.status.empty ? (snap.status.detail ?? 'Inget arkiv att spela upp.') : lane.empty)}</p>`}</div>
+    </section>`;
   }).join('');
 
-  document.querySelectorAll('.card').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      const buy = e.target.closest('.buy');
-      if (buy) { window.open(buy.dataset.href, '_blank', 'noopener'); return; }
-      selected = el.dataset.mint;
-      render();
+  bind();
+  if (openMint) refreshDrawer();
+}
+
+function rowHtml(t) {
+  const a = avatar(t.mint, t.symbol);
+  const m = t.metrics;
+  const mc = m.marketCapSol || t.launchMarketCapSol;
+  const fresh = !seen.has(t.mint);
+  seen.add(t.mint);
+  // En token utan prenumeration har inget uppmätt flöde. Att visa 0 vore ett
+  // påstående vi inte kan göra — skillnaden mellan "ingen köper" och "vi
+  // lyssnar inte" är hela poängen.
+  const live = t.tracking || t.metrics.totalTrades > 0;
+
+  const v = t.verdict ?? { verdict: 'VÄNTA', reason: '', missing: [] };
+  const vcls = v.verdict === 'KÖP' ? 'buy' : v.verdict === 'SKIPPA' ? 'skip' : 'wait';
+
+  const pills = [];
+  if (t.flowReversed) pills.push(['bad', 'flödet vänt']);
+  if (t.creatorOpeningShare !== null) {
+    const d = t.creatorOpeningShare;
+    pills.push([d > 12 ? 'bad' : d > 5 ? 'warn' : 'mut', `dev ${fmt(d, 1)}%`]);
+  } else pills.push(['mut', 'dev ?']);
+  if (t.preflight) {
+    const st = t.preflight.state;
+    pills.push([st === 'pass' ? 'ok' : st === 'fail' ? 'bad' : 'warn',
+      st === 'pass' ? 'authority ok' : st === 'fail' ? 'authority fail' : 'authority ?']);
+  }
+  if (t.holders && !t.holders.unknown) {
+    pills.push([t.holders.topHolderPct > 60 ? 'bad' : 'ok', `top10 ${fmt(t.holders.topHolderPct, 0)}%`]);
+  }
+  if (t.probeExpired && !t.qualified) pills.push(['mut', 'ingen traktion']);
+  if (t.earlyExits > 2) pills.push(['warn', `${t.earlyExits} tidiga ur`]);
+  if (t.migratedAt) pills.push(['info', 'migrerad']);
+
+  const p = t.curveProgress;
+  const curve = p === null
+    ? `<div class="curve"><div class="track"></div><span>kurva ?</span></div>`
+    : `<div class="curve"><div class="track"><i class="${p > 0.8 ? 'hi' : ''}" style="width:${(p * 100).toFixed(1)}%"></i></div><span>${(p * 100).toFixed(0)}%</span></div>`;
+
+  return `<button type="button" class="row${fresh ? ' fresh' : ''} ${vcls === 'buy' ? 'is-buy' : vcls === 'skip' ? 'is-skip' : ''}"
+      data-mint="${esc(t.mint)}" aria-selected="${t.mint === openMint}">
+    <div class="r1">
+      <span class="vd ${vcls}">${v.verdict}${v.verdict === 'VÄNTA' && v.missing.length ? `<small>${v.missing.length} saknas</small>` : ''}</span>
+      <span class="ava" style="background:${a.bg}">${esc(a.txt)}</span>
+      <span class="tick"><b>$${esc(t.symbol || '?')}</b><span>${esc(t.name || '')}</span></span>
+      <span class="age" data-age="${t.ageSec}">${ageText(t.ageSec)}</span>
+    </div>
+    <div class="reason">${esc(v.reason)}</div>
+    <div class="r2">
+      <span><i>mc</i> <b>${fmt(mc, 1)}</b></span>
+      ${live
+        ? `<span><i>köpare</i> <b>${m.uniqueBuyers}</b>/${m.uniqueSellers}</span>
+           <span><i>netto</i> <b class="${m.netSol > 0 ? 'pos' : m.netSol < 0 ? 'neg' : ''}">${m.netSol >= 0 ? '+' : ''}${fmt(m.netSol, 2)}</b></span>
+           <span><i>tx/s</i> <b>${fmt(m.txPerSec, 2)}</b></span>`
+        : `<span><i>flöde</i> <b>—</b></span>`}
+    </div>
+    ${curve}
+    <div class="pills">${pills.map(([c, l]) => `<span class="pill ${c}">${esc(l)}</span>`).join('')}</div>
+    <div class="acts">
+      <span class="cp" data-copy="${esc(t.mint)}">KOPIERA CA</span>
+      <a class="go ${vcls}" href="https://pump.fun/coin/${esc(t.mint)}" target="_blank" rel="noopener">${
+        v.verdict === 'KÖP' ? 'KÖP NU ↗' : v.verdict === 'SKIPPA' ? 'öppna ändå ↗' : 'öppna ↗'}</a>
+    </div>
+  </button>`;
+}
+
+function bind() {
+  document.querySelectorAll('.lane-head button').forEach((b) => {
+    b.addEventListener('click', () => { sortBy[b.dataset.lane] = b.dataset.sort; render(); });
+  });
+  document.querySelectorAll('.row').forEach((el) => {
+    el.addEventListener('click', async (e) => {
+      const cp = e.target.closest('[data-copy]');
+      if (cp) {
+        e.preventDefault();
+        try { await navigator.clipboard.writeText(cp.dataset.copy); } catch { /* nekad */ }
+        cp.classList.add('done'); cp.textContent = 'KOPIERAD';
+        setTimeout(() => { cp.classList.remove('done'); cp.textContent = 'KOPIERA CA'; }, 1200);
+        return;
+      }
+      if (e.target.closest('a')) return;
+      openMint = el.dataset.mint;
+      refreshDrawer(true);
     });
   });
 }
 
-function renderSide() {
-  const t = snap.board.find((x) => x.mint === selected);
-  const lr = lookupResult;
+/* Åldrarna tickar mellan serveruppdateringarna. */
+setInterval(() => {
+  document.querySelectorAll('.age').forEach((el) => {
+    const s = Number(el.dataset.age) + 1;
+    el.dataset.age = s;
+    el.textContent = ageText(s);
+  });
+}, 1000);
 
-  if (!t && !lr) {
-    $('side').innerHTML = `<div class="panel"><h3>Detalj</h3>
-      <p class="note">Välj ett coin i flödet, eller klistra in en CA ovan för att köra kontrollerna mot en godtycklig mint.</p></div>`;
-    return;
-  }
+/* ---------- lådan ---------- */
+async function refreshDrawer(open = false) {
+  if (!openMint) return;
+  const res = await fetch(`/api/detail?mint=${encodeURIComponent(openMint)}`);
+  const d = await res.json();
+  if (d.error) { closeDrawer(); return; }
 
-  const src = lr ?? t;
-  const mint = lr ? lr.mint : t.mint;
-  const a = avatar(mint, t?.symbol);
-  const auth = lr?.authorities ?? null;
-  const hold = lr?.holders ?? (t?.holders ?? null);
-  const pf = t?.preflight;
+  const a = avatar(d.mint, d.symbol);
+  const m = d.metrics;
+  const pf = d.preflight;
+  const meta = d.meta;
 
-  const authRow = auth
-    ? (auth.unknown
-        ? `<dd class="unknown">okänd — ${esc(auth.reason)}</dd>`
-        : auth.mintAuthorityActive || auth.freezeAuthorityActive
-          ? `<dd class="bad">${auth.mintAuthorityActive ? 'mint aktiv' : ''}${auth.mintAuthorityActive && auth.freezeAuthorityActive ? ' + ' : ''}${auth.freezeAuthorityActive ? 'freeze aktiv' : ''}</dd>`
-          : `<dd class="good">mint och freeze återkallade</dd>`)
-    : pf
-      ? `<dd class="${pf.checks.authority?.state === 'pass' ? 'good' : pf.checks.authority?.state === 'fail' ? 'bad' : 'unknown'}">${esc(pf.checks.authority?.detail ?? pf.state)}</dd>`
-      : `<dd class="unknown">ej körd</dd>`;
+  const authRow = pf
+    ? `<dd class="${pf.checks.authority?.state === 'pass' ? 'ok' : pf.checks.authority?.state === 'fail' ? 'bad' : 'unk'}">${esc(pf.checks.authority?.detail ?? pf.state)}</dd>`
+    : '<dd class="unk">ej körd</dd>';
 
-  const holdersBlock = hold && !hold.unknown
-    ? `<div class="hold">${hold.top.slice(0, 6).map((h) =>
-        `<div><span>${esc(h.address.slice(0, 12))}…</span><b>${h.pct.toFixed(1)} %</b></div>`).join('')}</div>`
-    : `<p class="note ${hold?.unknown ? 'unknown' : ''}">${hold?.unknown ? esc(hold.reason) : 'ej hämtad'}</p>`;
+  const socials = meta
+    ? [meta.twitter && ['X', meta.twitter], meta.telegram && ['TG', meta.telegram], meta.website && ['WEB', meta.website]]
+        .filter(Boolean)
+        .map(([l, u]) => `<a class="pill info" href="${esc(u)}" target="_blank" rel="noopener">${l}</a>`).join(' ')
+    : '';
 
-  $('side').innerHTML = `
-    <div class="panel">
-      <h3>${lr ? 'CA-analys' : 'Detalj'}</h3>
-      <div class="chead" style="margin-bottom:12px">
-        <span class="ava" style="background:${a.bg}">${esc(a.txt)}</span>
-        <span class="cid">
-          <div class="cname">${esc(t?.name || 'okänd i radarn')}</div>
-          <div class="cticker">$${esc(t?.symbol || '?')}</div>
-        </span>
-      </div>
-      <div class="addr" style="margin-bottom:12px">${esc(mint)}</div>
-      <dl class="kv">
-        <div class="row"><dt>Authority</dt>${authRow}</div>
-        <div class="row"><dt>Topp 10</dt><dd class="mono ${hold && !hold.unknown ? (hold.topHolderPct > 60 ? 'bad' : 'good') : 'unknown'}">${
-          hold && !hold.unknown ? `${hold.topHolderPct.toFixed(1)} %` : 'okänd'}</dd></div>
-        <div class="row"><dt>Dev tog</dt><dd class="mono">${
-          t?.creatorOpeningShare !== null && t?.creatorOpeningShare !== undefined
-            ? `${t.creatorOpeningShare.toFixed(2)} % · ${sol(t.creatorInitialSol)}` : '—'}</dd></div>
-        <div class="row"><dt>Creator</dt><dd class="mono">${esc((lr?.creator ?? t?.creator ?? '—').slice(0, 22))}</dd></div>
-        ${lr?.reputation ? `<div class="row"><dt>Historik</dt><dd class="mono">${
-          lr.reputation.known
-            ? `${lr.reputation.graduations}/${lr.reputation.settledLaunches} graduerade`
-            : 'ingen avgjord launch ännu'}</dd></div>` : ''}
-      </dl>
-      <a class="buy" style="margin-top:13px" href="https://pump.fun/coin/${esc(mint)}" target="_blank" rel="noopener">ÖPPNA PÅ PUMP.FUN ↗</a>
+  $('drawer').innerHTML = `
+    <div class="dhead">
+      ${meta?.image
+        ? `<img class="ava" src="${esc(meta.image)}" alt="" style="object-fit:cover" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ava',style:'background:${a.bg}',textContent:'${esc(a.txt)}'}))">`
+        : `<span class="ava" style="background:${a.bg}">${esc(a.txt)}</span>`}
+      <span><b>$${esc(d.symbol || '?')}</b><br><span>${esc(d.name || '')}</span></span>
+      <button type="button" class="dclose" id="dclose" aria-label="Stäng">×</button>
     </div>
 
-    <div class="panel">
+    ${d.verdict ? `<div class="sect" style="text-align:center">
+      <div class="vd ${d.verdict.verdict === 'KÖP' ? 'buy' : d.verdict.verdict === 'SKIPPA' ? 'skip' : 'wait'}"
+           style="width:100%;font-size:19px;padding:13px 0">${d.verdict.verdict}</div>
+      <p class="note" style="margin-top:9px">${esc(d.verdict.reason)}</p>
+      ${d.verdict.missing?.length ? `<p class="note" style="color:var(--amber)">Saknas: ${d.verdict.missing.map(esc).join(', ')}</p>` : ''}
+    </div>` : ''}
+    ${meta?.description ? `<p class="note" style="margin-bottom:10px">${esc(meta.description)}</p>` : ''}
+    ${socials ? `<div class="pills" style="margin-bottom:12px">${socials}</div>` : ''}
+
+    <div class="addr">${esc(d.mint)}</div>
+
+    <div class="sect">
+      <h3>Marknad</h3>
+      ${sparkline(d.series)}
+      <dl class="kv" style="margin-top:10px">
+        <div class="r"><dt>Market cap</dt><dd>${fmt(m.marketCapSol || d.launchMarketCapSol, 2)} SOL</dd></div>
+        <div class="r"><dt>Kurva</dt><dd>${d.curveProgress === null ? '<span class="unk">okänd</span>' : `${(d.curveProgress * 100).toFixed(1)} %`}</dd></div>
+        <div class="r"><dt>Köpare 60s</dt><dd>${m.uniqueBuyers} mot ${m.uniqueSellers} säljare</dd></div>
+        <div class="r"><dt>Netto 60s</dt><dd class="${m.netSol > 0 ? 'ok' : 'bad'}">${m.netSol >= 0 ? '+' : ''}${fmt(m.netSol, 3)} SOL</dd></div>
+        <div class="r"><dt>Största order</dt><dd>${(m.largestBuyShare * 100).toFixed(0)} % av köpvolymen</dd></div>
+      </dl>
+    </div>
+
+    <div class="sect">
+      <h3>Risk</h3>
+      <dl class="kv">
+        <div class="r"><dt>Authority</dt>${authRow}</div>
+        <div class="r"><dt>Topp 10</dt><dd class="${d.holders && !d.holders.unknown ? (d.holders.topHolderPct > 60 ? 'bad' : 'ok') : 'unk'}">${
+          d.holders && !d.holders.unknown ? `${fmt(d.holders.topHolderPct, 1)} %` : 'okänd'}</dd></div>
+        <div class="r"><dt>Dev tog</dt><dd>${d.creatorOpeningShare !== null ? `${fmt(d.creatorOpeningShare, 2)} % · ${fmt(d.creatorInitialSol, 2)} SOL` : '<span class="unk">okänd</span>'}</dd></div>
+        <div class="r"><dt>Tidiga ur</dt><dd>${d.earlyExits} av de första köparna</dd></div>
+        <div class="r"><dt>Creator</dt><dd>${esc((d.creator ?? '—').slice(0, 20))}</dd></div>
+        <div class="r"><dt>Historik</dt><dd>${d.reputation?.known
+          ? `${d.reputation.graduations}/${d.reputation.settledLaunches} graduerade`
+          : '<span class="unk">ingen avgjord launch</span>'}</dd></div>
+      </dl>
+    </div>
+
+    <div class="sect">
       <h3>Största innehavare</h3>
-      ${holdersBlock}
+      ${d.holders && !d.holders.unknown
+        ? `<div class="hold">${d.holders.top.slice(0, 8).map((h) =>
+            `<div><span>${esc(h.address.slice(0, 16))}…</span><b>${fmt(h.pct, 1)} %</b></div>`).join('')}</div>`
+        : `<p class="note">${esc(d.holders?.reason ?? 'ej hämtad')}</p>`}
     </div>
 
-    <div class="panel">
-      <h3>Vad verktyget inte vet</h3>
-      <p class="note">Kvalificering betyder att en token har riktig aktivitet — inte att den är säker.
-      Preflight körs efteråt, och ett <span class="unknown">okänt</span> resultat räknas aldrig som godkänt.</p>
-      <dl class="kv">
-        <div class="row"><dt>Basfrekvens</dt><dd class="mono">${
-          snap.creators.baseGraduationRate !== null
-            ? `${(snap.creators.baseGraduationRate * 100).toFixed(1)} % graduerar`
-            : 'för lite egen data'}</dd></div>
-        <div class="row"><dt>Egen inspelning</dt><dd class="mono">${snap.creators.launches} launches · ${snap.creators.graduations} graduationer</dd></div>
-      </dl>
-    </div>`;
+    <div class="sect">
+      <h3>Senaste affärer</h3>
+      ${d.tape?.length
+        ? `<div class="hold">${d.tape.slice(0, 14).map((t) =>
+            `<div><span style="color:${t.side === 'buy' ? 'var(--green)' : 'var(--red)'}">${t.side === 'buy' ? 'KÖP ' : 'SÄLJ'} ${esc(t.wallet.slice(0, 10))}…</span><b>${fmt(t.sol, 3)}</b></div>`).join('')}</div>`
+        : '<p class="note">Inga affärer ännu — token spåras först när den kvalificerat sig.</p>'}
+    </div>
+
+    <a class="dgo ${d.verdict?.verdict === 'KÖP' ? '' : 'muted'}" href="https://pump.fun/coin/${esc(d.mint)}"
+       target="_blank" rel="noopener">${d.verdict?.verdict === 'KÖP' ? 'KÖP PÅ PUMP.FUN ↗' : 'ÖPPNA PÅ PUMP.FUN ↗'}</a>`;
+
+  $('drawer').hidden = false;
+  $('scrim').hidden = false;
+  $('dclose').addEventListener('click', closeDrawer);
+  if (open) $('drawer').scrollTop = 0;
 }
 
-document.querySelectorAll('.tabs button').forEach((b) => {
-  b.addEventListener('click', () => {
-    filter = b.dataset.f;
-    document.querySelectorAll('.tabs button').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
-    render();
-  });
+/**
+ * Prisgraf ur marknadsvärdesserien. Skalan sätts av serien själv, och
+ * etiketterna namnger värden grafen faktiskt når.
+ */
+function sparkline(series) {
+  if (!series || series.length < 2) return '<p class="note">För få datapunkter för en graf.</p>';
+  const W = 380, H = 90, pad = 4;
+  const vals = series.map((p) => p.mc);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const span = hi - lo || 1;
+  const x = (i) => pad + (i / (series.length - 1)) * (W - pad * 2);
+  const y = (v) => H - pad - ((v - lo) / span) * (H - pad * 2 - 12);
+
+  const line = series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.mc).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(series.length - 1).toFixed(1)} ${H - pad} L${x(0).toFixed(1)} ${H - pad} Z`;
+  const up = vals.at(-1) >= vals[0];
+  const c = up ? 'var(--green)' : 'var(--red)';
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Marknadsvärde över tid">
+    <path d="${area}" fill="${c}" opacity=".1"/>
+    <path d="${line}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="${x(series.length - 1).toFixed(1)}" cy="${y(vals.at(-1)).toFixed(1)}" r="2.6" fill="${c}"/>
+    <text x="${pad}" y="11" fill="var(--faint)" font-family="var(--mono)" font-size="9">${hi.toFixed(1)}</text>
+    <text x="${pad}" y="${H - 1}" fill="var(--faint)" font-family="var(--mono)" font-size="9">${lo.toFixed(1)}</text>
+  </svg>`;
+}
+
+function closeDrawer() {
+  openMint = null;
+  $('drawer').hidden = true;
+  $('scrim').hidden = true;
+  render();
+}
+$('scrim').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+  if (e.key === '/' && document.activeElement !== $('ca')) { e.preventDefault(); $('ca').focus(); }
 });
 
-async function runLookup() {
-  const mint = $('ca').value.trim();
-  if (!mint) return;
-  $('analyze').disabled = true;
-  $('analyze').textContent = 'KÖR…';
-  try {
-    const res = await fetch(`/api/lookup?mint=${encodeURIComponent(mint)}`);
-    const body = await res.json();
-    if (body.error) {
-      lookupResult = null;
-      $('side').innerHTML = `<div class="panel"><h3>CA-analys</h3><p class="note bad">${esc(body.error)}</p></div>`;
-      return;
-    }
-    lookupResult = body;
-    selected = body.mint;
-    render();
-  } finally {
-    $('analyze').disabled = false;
-    $('analyze').textContent = 'ANALYSERA';
-  }
-}
-$('analyze').addEventListener('click', runLookup);
-$('ca').addEventListener('keydown', (e) => { if (e.key === 'Enter') runLookup(); });
+$('ca').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
+$('help').addEventListener('click', () => {
+  const bar = $('helpbar');
+  bar.hidden = !bar.hidden;
+  $('help').setAttribute('aria-expanded', String(!bar.hidden));
+});

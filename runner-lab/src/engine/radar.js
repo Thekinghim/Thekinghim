@@ -1,5 +1,6 @@
 import { TokenWindow } from './windows.js';
 import { config } from '../config.js';
+import { verdictFor } from './verdict.js';
 
 /**
  * Radarn: håller varje ny mint i fönstret, uppdaterar mått från trades och
@@ -34,6 +35,7 @@ export class Radar {
       creatorInitialSol: Number(raw.solAmount ?? 0),
       creatorInitialTokens: Number(raw.initialBuy ?? 0),
       vTokens: Number(raw.vTokensInBondingCurve ?? 0),
+      vSolAtLaunch: Number(raw.vSolInBondingCurve ?? 0),
       window: new TokenWindow(raw.mint, config.radar.rollingMs),
       qualified: false,
       tracking: false,
@@ -58,6 +60,7 @@ export class Radar {
       sol: Number(raw.solAmount ?? 0),
       wallet: raw.traderPublicKey ?? 'okänd',
       marketCapSol: Number(raw.marketCapSol ?? 0),
+      vSol: Number(raw.vSolInBondingCurve ?? 0),
     });
 
     if (!entry.qualified) {
@@ -81,6 +84,20 @@ export class Radar {
   }
 
   /**
+   * Hur långt bonding curve har fyllts, 0–1.
+   *
+   * Returnerar null när vi inte sett något virtuellt SOL-värde. Att gissa 0
+   * skulle placera token i "nya" som om ingenting hänt, vilket är fel svar
+   * på frågan "vet vi?".
+   */
+  static curveProgress(entry, metrics, cfg) {
+    const vSol = metrics.vSol || entry.vSolAtLaunch;
+    if (!(vSol > 0)) return null;
+    const real = vSol - cfg.curve.virtualStartSol;
+    return Math.max(0, Math.min(1, real / cfg.curve.graduationSol));
+  }
+
+  /**
    * Andel av supplyn skaparen tog i samma transaktion som skapandet.
    * Returnerar null när fälten saknas — okänt är inte noll.
    */
@@ -90,19 +107,43 @@ export class Radar {
     return (entry.creatorInitialTokens / total) * 100;
   }
 
-  /** Släpper tokens som fallit ur fönstret. Returnerar mints att avprenumerera. */
+  /**
+   * Släpper prenumerationer och tokens som inte längre är intressanta.
+   *
+   * Två skäl att släppa en prenumeration:
+   *   1. Probe-fönstret gick ut utan att token kvalificerade sig.
+   *   2. Token föll ur radarfönstret helt.
+   *
+   * @returns {{release: string[], drop: string[]}} mints att avprenumerera,
+   *   och de som dessutom togs bort ur radarn.
+   */
   evict(now = Date.now()) {
     const maxAge = config.radar.windowMinutes * 60_000;
-    const released = [];
+    const probeMs = config.radar.probeSeconds * 1000;
+    const release = [];
+    const drop = [];
+
     for (const [mint, entry] of this.tokens) {
-      if (now - entry.launchedAt <= maxAge) continue;
+      const age = now - entry.launchedAt;
+
+      // Probe utgången utan traktion: sluta lyssna, men behåll raden i radarn
+      // så att den syns tills fönstret går ut.
+      if (entry.tracking && !entry.qualified && age > probeMs) {
+        entry.tracking = false;
+        entry.probeExpired = true;
+        release.push(mint);
+      }
+
+      if (age <= maxAge) continue;
       // Migrerade tokens behålls längre — de är utfallsdata.
       if (entry.migratedAt && now - entry.migratedAt < 3600_000) continue;
+
       this.tokens.delete(mint);
       this.counters.dropped++;
-      if (entry.tracking) released.push(mint);
+      drop.push(mint);
+      if (entry.tracking) release.push(mint);
     }
-    return released;
+    return { release, drop };
   }
 
   /** Kandidater i fönstret, mest aktiva först. */
@@ -110,7 +151,16 @@ export class Radar {
     const now = Date.now();
     const rows = [];
     for (const entry of this.tokens.values()) {
+      const metrics = entry.window.metrics(now);
+      const progress = Radar.curveProgress(entry, metrics, config);
+      const lane = entry.migratedAt
+        ? 'migrated'
+        : progress !== null && progress >= config.curve.completingFrom
+          ? 'completing'
+          : 'new';
       rows.push({
+        lane,
+        curveProgress: progress,
         mint: entry.mint,
         name: entry.name,
         symbol: entry.symbol,
@@ -121,6 +171,7 @@ export class Radar {
         creatorOpeningShare: Radar.creatorOpeningShare(entry),
         qualified: entry.qualified,
         tracking: entry.tracking,
+        probeExpired: entry.probeExpired === true,
         migratedAt: entry.migratedAt,
         preflight: entry.preflight,
         holders: entry.holders,
@@ -128,9 +179,12 @@ export class Radar {
         // Kvalificering är klibbig — anropen är redan spenderade och ska inte
         // spenderas om. Men ett flöde som vänt måste synas, annars ser en
         // token som dumpas fortfarande ut som en kandidat.
-        flowReversed: entry.qualified && entry.window.metrics(now).netSol < 0,
-        metrics: entry.window.metrics(now),
+        flowReversed: entry.qualified && metrics.netSol < 0,
+        meta: entry.meta ?? null,
+        series: entry.window.series,
+        metrics,
       });
+      rows[rows.length - 1].verdict = verdictFor(rows[rows.length - 1]);
     }
     rows.sort((a, b) => {
       if (a.qualified !== b.qualified) return a.qualified ? -1 : 1;

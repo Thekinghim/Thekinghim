@@ -17,8 +17,16 @@ export class TokenWindow {
     this.firstTs = 0;
     this.lastTs = 0;
     this.lastMarketCapSol = 0;
+    this.lastVSol = 0;
     /** Första köparna i ordning — används för att se om de lämnar. */
     this.firstBuyers = [];
+    /**
+     * Prisserie för grafen, och de senaste affärerna för tapen. Båda är
+     * begränsade — en token som handlas i timmar får inte äta minne — och
+     * finns för att man inte ska behöva öppna pump.fun för att se förloppet.
+     */
+    this.series = [];
+    this.tape = [];
   }
 
   add(trade) {
@@ -26,6 +34,7 @@ export class TokenWindow {
     this.lastTs = trade.ts;
     this.totalTrades++;
     if (trade.marketCapSol > 0) this.lastMarketCapSol = trade.marketCapSol;
+    if (trade.vSol > 0) this.lastVSol = trade.vSol;
     this.trades.push(trade);
 
     const delta = trade.side === 'buy' ? trade.sol : -trade.sol;
@@ -36,6 +45,19 @@ export class TokenWindow {
     if (trade.side === 'buy' && this.firstBuyers.length < 20 && !this.firstBuyers.includes(trade.wallet)) {
       this.firstBuyers.push(trade.wallet);
     }
+
+    if (trade.marketCapSol > 0) {
+      const last = this.series.at(-1);
+      // Max ett värde per sekund. Grafen blir inte bättre av fler punkter,
+      // men serien blir tyngre att skicka.
+      if (!last || trade.ts - last.t >= 1000) {
+        this.series.push({ t: trade.ts, mc: trade.marketCapSol });
+        if (this.series.length > 240) this.series.shift();
+      }
+    }
+
+    this.tape.unshift({ ts: trade.ts, side: trade.side, sol: trade.sol, wallet: trade.wallet });
+    if (this.tape.length > 40) this.tape.pop();
 
     const cutoff = trade.ts - this.rollingMs;
     let drop = 0;
@@ -76,6 +98,7 @@ export class TokenWindow {
       trades: w.length,
       totalTrades: this.totalTrades,
       marketCapSol: this.lastMarketCapSol,
+      vSol: this.lastVSol,
       ageMs: this.lastTs - this.firstTs,
     };
   }

@@ -91,8 +91,33 @@ test('evict släpper gamla tokens och rapporterar vilka som spårades', () => {
   const r = new Radar();
   const e = r.onLaunch({ mint: 'old', symbol: 'O' });
   e.tracking = true;
-  assert.deepEqual(r.evict(Date.now() + 60 * 60_000), ['old']);
+  const out = r.evict(Date.now() + 60 * 60_000);
+  assert.deepEqual(out.release, ['old']);
+  assert.deepEqual(out.drop, ['old']);
   assert.equal(r.tokens.size, 0);
+});
+
+test('probe-fönstret släpper prenumerationen men behåller raden', () => {
+  const r = new Radar();
+  const e = r.onLaunch({ mint: 'quiet', symbol: 'Q' });
+  e.tracking = true;
+
+  // Utan traktion inom probe-fönstret ska vi sluta lyssna — men token ska
+  // finnas kvar i radarn tills hela fönstret gått ut.
+  const out = r.evict(Date.now() + 120_000);
+  assert.deepEqual(out.release, ['quiet']);
+  assert.deepEqual(out.drop, []);
+  assert.equal(r.tokens.size, 1);
+  assert.equal(r.board()[0].probeExpired, true);
+});
+
+test('en kvalificerad token behåller sin prenumeration förbi probe-fönstret', () => {
+  const r = new Radar();
+  const e = r.onLaunch({ mint: 'hot', symbol: 'H' });
+  e.tracking = true;
+  for (let i = 0; i < 10; i++) r.onTrade({ mint: 'hot', txType: 'buy', solAmount: 1, traderPublicKey: `b${i}` });
+  assert.equal(e.qualified, true);
+  assert.deepEqual(r.evict(Date.now() + 120_000).release, []);
 });
 
 test('händelselagret dedupliceras på signatur och kan spelas upp', () => {
@@ -132,4 +157,52 @@ test('en launch som ännu kan gradera räknas varken som lyckad eller misslyckad
   assert.equal(rep.settledLaunches, 0, 'en färsk launch är inte avgjord');
   assert.equal(rep.known, false);
   assert.equal(rep.launchesLast24h, 1);
+});
+
+/* ---------- omdömet ---------- */
+import { verdictFor } from '../src/engine/verdict.js';
+
+const row = (o = {}) => ({
+  qualified: true, tracking: true, probeExpired: false, flowReversed: false,
+  earlyExits: 0, curveProgress: 0.3, creatorOpeningShare: 3,
+  preflight: { state: 'pass', checks: { authority: { state: 'pass', detail: 'ok' } } },
+  holders: { unknown: false, topHolderPct: 30 },
+  metrics: { uniqueBuyers: 20, uniqueSellers: 4, netSol: 5, totalTrades: 40, largestBuyShare: 0.2 },
+  ...o,
+});
+
+test('KÖP kräver att allt är känt och över tröskel', () => {
+  assert.equal(verdictFor(row()).verdict, 'KÖP');
+});
+
+test('okänd data ger VÄNTA, aldrig KÖP', () => {
+  assert.equal(verdictFor(row({ preflight: null })).verdict, 'VÄNTA');
+  assert.equal(verdictFor(row({ holders: { unknown: true, reason: 'strypt' } })).verdict, 'VÄNTA');
+  assert.equal(verdictFor(row({ creatorOpeningShare: null })).verdict, 'VÄNTA');
+
+  // Ett strypt RPC får aldrig se ut som en godkänd kontroll.
+  const throttled = verdictFor(row({
+    preflight: { state: 'unknown', checks: { authority: { state: 'unknown', detail: '429' } } },
+  }));
+  assert.equal(throttled.verdict, 'VÄNTA');
+});
+
+test('ett diskvalificerande fynd slår allt annat', () => {
+  const good = row();
+  for (const patch of [
+    { preflight: { state: 'fail', checks: { authority: { state: 'fail', detail: 'mint aktiv' } } } },
+    { holders: { unknown: false, topHolderPct: 72 } },
+    { creatorOpeningShare: 22 },
+    { flowReversed: true },
+    { earlyExits: 6 },
+    { probeExpired: true, qualified: false },
+  ]) {
+    assert.equal(verdictFor({ ...good, ...patch }).verdict, 'SKIPPA',
+      `väntade SKIPPA för ${JSON.stringify(Object.keys(patch))}`);
+  }
+});
+
+test('för svag traktion ger VÄNTA, inte SKIPPA', () => {
+  assert.equal(verdictFor(row({ metrics: { ...row().metrics, uniqueBuyers: 5 } })).verdict, 'VÄNTA');
+  assert.equal(verdictFor(row({ metrics: { ...row().metrics, netSol: 0.1 } })).verdict, 'VÄNTA');
 });

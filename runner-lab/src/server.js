@@ -39,6 +39,12 @@ export function createServer(app) {
 
     if (url.pathname === '/api/snapshot') return json(res, app.snapshot());
 
+    if (url.pathname === '/api/detail') {
+      const mint = (url.searchParams.get('mint') ?? '').trim();
+      const detail = await app.detail(mint);
+      return json(res, detail ?? { error: 'Okänd mint i radarn' }, detail ? 200 : 404);
+    }
+
     // Analys av en inklistrad CA. Kör de riktiga on-chain-kontrollerna.
     if (url.pathname === '/api/lookup') {
       const mint = (url.searchParams.get('mint') ?? '').trim();
