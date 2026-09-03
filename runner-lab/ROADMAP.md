@@ -5,10 +5,10 @@ kunnat verifiera är märkt så.
 
 ---
 
-## P0 — Trasigt just nu
+## P0 — Löst 2026-09-03
 
-Tre saker gör terminalen svår eller omöjlig att använda live. Inget annat på
-listan spelar roll förrän de är lösta.
+Tre saker gjorde terminalen svår eller omöjlig att använda live. Alla tre är
+åtgärdade och verifierade.
 
 ### 1. Flödet går inte att scrolla
 
@@ -22,9 +22,16 @@ du inte kan scrolla ner i listan över huvud taget — du kastas till toppen var
 sekund. Samma sak gäller hovring, textmarkering och `fresh`-animationen som
 spelas om för varje rad hela tiden.
 
-**Åtgärd:** rendera per rad i stället för per kolumn. Behåll en `Map` från mint
-till DOM-nod, uppdatera bara de fält som ändrats, flytta noder vid omsortering.
-Det tar också bort behovet av taket på 60 rader.
+**Löst.** Renderingen är inkrementell: en nod per mint, och innehållet skrivs om
+bara när radens signatur ändrats. Signaturen utesluter åldern, som tickar
+separat, så en rad som bara blir äldre rörs inte alls.
+
+Verifierat: listan är samma DOM-nod efter uppdateringar, och raden mitt i vyn
+står kvar. `scrollTop` ändras fortfarande — det är webbläsarens scroll-ankring
+som kompenserar när rader läggs till ovanför, vilket är önskat beteende.
+
+Kolumnen fryses dessutom medan pekaren är i den, med en synlig `pausad`-markering.
+En lista som sorterar om under markören går inte att klicka i.
 
 ### 2. CA-sökrutan slår inte upp något
 
@@ -36,16 +43,17 @@ anropar den aldrig** — sökrutan filtrerar bara raderna som redan finns i rada
 Klistrar du in en adress som inte råkar ligga i fönstret visas noll rader och
 inget händer. Det är den funktion du bad om allra först.
 
-**Åtgärd:** när söksträngen ser ut som en Solana-adress och inte matchar något i
-radarn, anropa `/api/lookup` och visa resultatet i lådan.
+**Löst.** Ser söksträngen ut som en Solana-adress och inte matchar något i radarn
+anropas `/api/lookup`, och resultatet visas i lådan med authority- och
+innehavarkontroll.
 
 ### 3. Mobil är obrukbar
 
 Tre kolumner utan brytpunkt för smala skärmar. Två `max-width`-regler finns i
 hela stilmallen.
 
-**Åtgärd:** under 900 px — en kolumn i taget med flikar för Nya / Fyller kurvan
-/ Migrerade, och lådan som helskärm.
+**Löst.** Under 1000 px visas en kolumn i taget med flikar som bär antalet, och
+lådan täcker skärmen. Verifierat på iPhone 13: ingen sidledsscroll.
 
 ---
 
