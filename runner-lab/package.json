@@ -1,0 +1,17 @@
+{
+  "name": "runner-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Live pump.fun early-market terminal. Noll npm-beroenden.",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "replay": "SOURCE=replay node src/index.js",
+    "record": "RECORD_ONLY=1 node src/index.js",
+    "test": "node --test",
+    "export-demo": "node src/export-demo.js"
+  }
+}

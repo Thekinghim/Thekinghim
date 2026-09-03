@@ -1,0 +1,501 @@
+<title>Pump Scout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  /* Medvetet enda tema. Det här är en terminal som körs bredvid pump.fun,
+     och pump.fun är mörkt. Alla färger sätts explicit så sidan håller
+     oavsett vilken bakgrund värden målar bakom den. */
+  :root {
+    --ground: #0a0d0b;
+    --surface: #121714;
+    --surface-2: #1a211d;
+    --raised: #222a25;
+    --ink: #e9f0eb;
+    --dim: #8a9790;
+    --faint: #5e6a64;
+    --line: #212a25;
+
+    --green: #5ce68f;
+    --green-dim: #5ce68f22;
+    --amber: #f5c451;
+    --amber-dim: #f5c45122;
+    --red: #ff6b6b;
+    --red-dim: #ff6b6b22;
+
+    --display: Archivo, "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--display);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Toppbar ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 11px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 20;
+    flex-wrap: wrap;
+  }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 16px; letter-spacing: -0.02em; }
+  .logo .mark {
+    width: 24px; height: 24px; border-radius: 7px;
+    background: var(--green); color: #06180e;
+    display: grid; place-items: center; font-size: 14px; font-weight: 800;
+  }
+  .logo span { color: var(--green); }
+
+  .live {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 11px; color: var(--amber);
+    background: var(--amber-dim); padding: 5px 9px; border-radius: 6px;
+  }
+  .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+
+  .ticker {
+    margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+  }
+  .ticker b { color: var(--ink); font-weight: 500; }
+  .ticker .bad { color: var(--red); }
+
+  /* ---------- Sidhuvud ---------- */
+  .lede { padding: 22px 18px 0; max-width: 1500px; margin: 0 auto; }
+  h1 {
+    font-size: clamp(22px, 3.4vw, 34px); font-weight: 800; letter-spacing: -0.03em;
+    margin: 0 0 8px; text-wrap: balance;
+  }
+  h1 em { font-style: normal; color: var(--green); }
+  .lede p { margin: 0; color: var(--dim); max-width: 74ch; font-size: 14.5px; }
+  .lede p b { color: var(--ink); font-weight: 600; }
+
+  .replay-note {
+    margin-top: 16px;
+    display: flex; gap: 11px; align-items: flex-start;
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    border-radius: 8px; padding: 12px 14px; max-width: 88ch;
+    font-size: 13px; color: var(--dim);
+  }
+  .replay-note b { color: var(--ink); }
+  .replay-note .tag {
+    font-family: var(--mono); font-size: 10px; color: var(--amber);
+    letter-spacing: .1em; white-space: nowrap; padding-top: 2px;
+  }
+
+  /* ---------- Layout ---------- */
+  .app {
+    display: grid; grid-template-columns: minmax(0, 1fr) 372px;
+    gap: 18px; padding: 22px 18px 60px; max-width: 1500px; margin: 0 auto;
+    align-items: start;
+  }
+  @media (max-width: 1080px) { .app { grid-template-columns: 1fr; } }
+
+  .bar {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .bar h2 {
+    font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--dim); margin: 0; font-weight: 600;
+  }
+  .filters { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .filters button, .reveal {
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    background: var(--surface-2); border: 1px solid var(--line);
+    padding: 6px 11px; border-radius: 6px; cursor: pointer;
+  }
+  .filters button[aria-pressed="true"] { color: #06180e; background: var(--green); border-color: var(--green); font-weight: 700; }
+  .filters button:hover, .reveal:hover { color: var(--ink); }
+  .reveal[aria-pressed="true"] { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+  button:focus-visible, .coin:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+  /* ---------- Myntrutnätet ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 10px; }
+
+  .coin {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px; cursor: pointer;
+    display: flex; flex-direction: column; gap: 10px;
+    transition: border-color .12s ease, transform .12s ease;
+    text-align: left; font: inherit; color: inherit;
+  }
+  .coin:hover { border-color: var(--raised); transform: translateY(-1px); }
+  .coin[aria-selected="true"] { border-color: var(--green); }
+
+  .coin-head { display: flex; gap: 10px; align-items: center; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 9px; flex: none;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 700; font-size: 13px; color: #07120c;
+  }
+  .coin-id { min-width: 0; flex: 1; }
+  .coin-sym { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+  .coin-name {
+    color: var(--faint); font-size: 11.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .coin-time { font-family: var(--mono); font-size: 10.5px; color: var(--faint); flex: none; }
+
+  .verdict {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .09em;
+    padding: 4px 7px; border-radius: 5px; align-self: flex-start;
+  }
+  .verdict.watch { background: var(--green-dim); color: var(--green); }
+  .verdict.thin { background: var(--amber-dim); color: var(--amber); }
+  .verdict.skip { background: var(--red-dim); color: var(--red); }
+  .verdict.partial { background: var(--surface-2); color: var(--dim); }
+
+  .signals { display: flex; flex-wrap: wrap; gap: 5px; }
+  .sig {
+    font-family: var(--mono); font-size: 10.5px; color: var(--dim);
+    background: var(--surface-2); border-radius: 5px; padding: 3px 7px;
+  }
+  .sig.on { color: var(--green); background: var(--green-dim); }
+  .sig.off { color: var(--faint); }
+
+  .outcome {
+    font-family: var(--mono); font-size: 11px;
+    border-top: 1px dashed var(--line); padding-top: 9px;
+    display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+  }
+  .outcome .r { font-weight: 700; }
+  .outcome .r.win { color: var(--green); }
+  .outcome .r.loss { color: var(--red); }
+  .outcome .lab { color: var(--faint); }
+  .outcome .suspect { color: var(--amber); font-size: 10px; }
+
+  /* ---------- Sidopanel ---------- */
+  aside { display: grid; gap: 14px; position: sticky; top: 74px; }
+  @media (max-width: 1080px) { aside { position: static; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px; }
+  .panel h3 {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 10px; font-weight: 600;
+  }
+  .panel .hint { font-size: 12px; color: var(--faint); margin: 0 0 12px; }
+
+  .dossier-head { display: flex; gap: 11px; align-items: center; margin-bottom: 12px; }
+  .dossier-head .avatar { width: 44px; height: 44px; font-size: 14px; }
+  .dossier-sym { font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
+  .mintline {
+    font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+    word-break: break-all; background: var(--surface-2);
+    padding: 7px 9px; border-radius: 6px; margin-bottom: 12px; line-height: 1.45;
+  }
+  .mintline b { color: var(--dim); font-weight: 400; }
+
+  dl.kv { margin: 0; display: grid; gap: 8px; }
+  .kv-row { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+  .kv-row dt { font-family: var(--mono); font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+  .kv-row dd { margin: 0; font-size: 12.5px; }
+  .kv-row dd.mono { font-family: var(--mono); }
+
+  .unknown { color: var(--amber); }
+
+  .baserate { display: grid; gap: 7px; }
+  .br-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11.5px; }
+  .br-row span { color: var(--faint); }
+  .br-row b { font-weight: 500; }
+  .br-row b.bad { color: var(--red); }
+  .br-row b.good { color: var(--green); }
+
+  .socials-tbl { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .socials-tbl th, .socials-tbl td { padding: 4px 3px; text-align: right; }
+  .socials-tbl th:first-child, .socials-tbl td:first-child { text-align: left; }
+  .socials-tbl thead th { color: var(--faint); font-weight: 400; border-bottom: 1px solid var(--line); }
+
+  footer {
+    max-width: 1500px; margin: 0 auto; padding: 0 18px 60px;
+    color: var(--dim); font-size: 13px; display: grid; gap: 14px;
+  }
+  footer .box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px; }
+  footer h3 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin: 0 0 9px; }
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 2px 6px; border-radius: 4px; color: var(--green); }
+  footer b { color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="topbar">
+  <div class="logo"><span class="mark">P</span>Pump<span>Scout</span></div>
+  <span class="live" id="live"><i></i> REPLAY — riktiga launches</span>
+  <div class="ticker" id="ticker"></div>
+</div>
+
+<div class="lede">
+  <h1>Hitta runnern <em>innan flocken</em> — på pump.fun</h1>
+  <p>
+    Varje ny launch, i samma sekund den sker, via PumpPortals gratisström.
+    Verktyget läser tre saker som pump.fun självt inte visar dig:
+    <b>deployerns meritlista</b>, <b>hur mycket av supplyn deployern tog i öppningsblocket</b>,
+    och <b>om uppmärksamheten kom före eller efter de riktiga köparna</b>.
+  </p>
+
+  <div class="replay-note">
+    <span class="tag">REPLAY</span>
+    <span>
+      Mynten nedan är <b>riktiga pump.fun-launches</b> — riktiga mintadresser du kan slå upp,
+      från ett godtyckligt 81-minutersfönster den 19 januari 2025. Ingen selektion på utfall:
+      27 av 32 blev high-risk, vilket är hur flödet faktiskt ser ut.
+      Utfallen kommer från MELT (Georgia Tech, 26 996 märkta launches).
+      Ingen köprekommendation ges i replay: tre av fyra signaler kräver live-strömmen,
+      och socials ensamt separerar inte utfall. <b>Tryck "visa utfall"</b> för att se vad som hände.
+    </span>
+  </div>
+</div>
+
+<div class="app">
+  <section>
+    <div class="bar">
+      <h2>Flöde</h2>
+      <div class="filters">
+        <button type="button" data-f="all" aria-pressed="true">alla</button>
+        <button type="button" data-f="social" aria-pressed="false">med socials</button>
+        <button type="button" data-f="nosocial" aria-pressed="false">utan socials</button>
+        <button type="button" class="reveal" id="reveal" aria-pressed="false">visa utfall</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <aside>
+    <div class="panel" id="dossier"></div>
+
+    <div class="panel">
+      <h3>Basfrekvensen du slåss mot</h3>
+      <p class="hint">Uppmätt på 26 996 märkta pump.fun-launches. Det här är motståndet, inte en prognos.</p>
+      <div class="baserate" id="baserate"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Socials vid launch — ingen signal</h3>
+      <p class="hint">Ett test som misslyckades. Redovisas för att negativa resultat sparar pengar.</p>
+      <table class="socials-tbl">
+        <thead><tr><th>socials</th><th>n</th><th>high-risk</th><th>median</th></tr></thead>
+        <tbody id="socials"></tbody>
+      </table>
+    </div>
+  </aside>
+</div>
+
+<footer>
+  <div class="box">
+    <h3>Vad verktyget kan och inte kan</h3>
+    <p style="margin:0 0 10px">
+      <b>Kan:</b> se varje launch i samma sekund, gratis och utan API-nyckel
+      (<code>wss://pumpportal.fun/api/data</code>), och bygga en creator-historik som växer
+      för varje dygn det körs.
+    </p>
+    <p style="margin:0 0 10px">
+      <b>Kan inte:</b> förutsäga vilken coin som pumpar. Av de 200 största avkastningarna i
+      datasetet var <b>86 klassade som högrisk</b> — runners <i>är</i> ofta högrisk, så ett rent
+      riskfilter hade sållat bort 43 % av de största vinnarna. Medianen är −66 % och bara
+      20 % av alla launches slutar plus.
+    </p>
+    <p style="margin:0">
+      <b>Creator-historiken är det som inte går att köpa.</b> MELT:s publika dataset har inget
+      användbart creator-fält — det är en och samma adress på alla 46 139 rader. Ingen
+      datatjänst säljer den heller. Den finns bara om man spelar in strömmen själv, från dag ett.
+    </p>
+  </div>
+  <div class="box">
+    <h3>Kör det</h3>
+    <div style="font-family:var(--mono);font-size:12.5px;display:grid;gap:5px">
+      <div><code>npm run scout</code> <span style="color:var(--faint)">— live mot pump.fun via PumpPortal</span></div>
+      <div><code>npm run replay</code> <span style="color:var(--faint)">— den här vyn, mot inspelade launches</span></div>
+      <div><code>python packages/research/melt_repro/verify_baseline.py</code> <span style="color:var(--faint)">— reproducerar baslinjen</span></div>
+    </div>
+  </div>
+  <p style="margin:0;color:var(--faint);font-size:12.5px">
+    Verktyget lägger inga ordrar. Memecoin-handel är negativ-summa efter avgifter för de
+    flesta deltagare. MELT-datan är CC BY-NC 4.0 — den får användas för forskning och
+    validering, inte i en såld produkt utan tillstånd från författarna.
+  </p>
+</footer>
+
+<script>
+  const DATA = {"window":[{"mint":"A1TZJUA5AND2tyAYvYACR4LvTha1bnEmHPpnxxqzpump","name":"FRACTAL AI TRADING","symbol":"FRACTAL","ts":1737309125,"time":"17:52:05","twitter":true,"website":false,"telegram":false,"socials":1,"label":"medium","return_ratio":2.603943476160132,"min_ratio":0.321867350811038,"suspect":false},{"mint":"85DRqykNU9NDUv2xEfxYpGuAwAxcfMyTGpzoD53jpump","name":"OFFICIAL JUSTIN SUN","symbol":"SUN","ts":1737309240,"time":"17:54:00","twitter":false,"website":false,"telegram":true,"socials":1,"label":"high","return_ratio":-0.8812837545883538,"min_ratio":0.0397659242667162,"suspect":false},{"mint":"6EzWY5eT7oUng7vQHVyoebB79C7xYPA3yVEMgKR4pump","name":"OFFICIAL XÆA12","symbol":"XÆA12","ts":1737309408,"time":"17:56:48","twitter":false,"website":false,"telegram":false,"socials":0,"label":"medium","return_ratio":0.060946416378035,"min_ratio":0.3941492229066063,"suspect":false},{"mint":"HHWr2Ji8yKG24FrAv2HCXEZCKDmeA8UwWX5r43UiQnc2","name":"TIKTOK","symbol":"TIKTOK","ts":1737309590,"time":"17:59:50","twitter":false,"website":false,"telegram":false,"socials":0,"label":"high","return_ratio":-0.7049365329479724,"min_ratio":0.069707346806468,"suspect":false},{"mint":"FtFS2tDZYo2TnneLxpJqPre8FwUTiVRp7KnXeiizpump","name":"Trump Rally","symbol":"Rally","ts":1737309639,"time":"18:00:39","twitter":true,"website":false,"telegram":true,"socials":2,"label":"high","return_ratio":-0.7610892404440294,"min_ratio":0.1835663388149114,"suspect":false},{"mint":"3KJnuQGssUT5ygPaHVR7hXZUEuSFoGuL26sVvaRypump","name":"OFFICIAL ELON","symbol":"ELON","ts":1737309690,"time":"18:01:30","twitter":false,"website":false,"telegram":false,"socials":0,"label":"high","return_ratio":-0.9515690101272528,"min_ratio":0.024853028733782,"suspect":false},{"mint":"7eSVLr3sUnnc8aF7fPqnTaCS2YeGH4hjHsNmwL7qpump","name":"Official Mexican Trump","symbol":"MEXXX","ts":1737309795,"time":"18:03:15","twitter":false,"website":false,"telegram":false,"socials":0,"label":"high","return_ratio":-0.7437265698720286,"min_ratio":0.1517095166350196,"suspect":false},{"mint":"6MoQi8Zq8pLBiWSftaWJ6U5mCmGUSpyPzN3hq9iVpump","name":"Sniffcoin Creepy Joe Biden","symbol":"SNIFF","ts":1737309883,"time":"18:04:43","twitter":false,"website":true,"telegram":false,"socials":1,"label":"high","return_ratio":-0.7926101840942459,"min_ratio":0.1126796478583434,"suspect":false},{"mint":"3vXEV2u94wipQtVxws9rUeP7oLTtNVPSyncE5vbSpump","name":"ACT I: STOP WW3","symbol":"ACT","ts":1737310247,"time":"18:10:47","twitter":true,"website":false,"telegram":false,"socials":1,"label":"medium","return_ratio":-0.3417125910203746,"min_ratio":0.6112600880459985,"suspect":false},{"mint":"GdN6VrbMaKiXqg9nMjhD1bYh9He1PJ5JCSMjQuQNpump","name":"OFFICIAL ELON","symbol":"ELON","ts":1737310339,"time":"18:12:19","twitter":false,"website":false,"telegram":false,"socials":0,"label":"high","return_ratio":0.5099317427995008,"min_ratio":0.9796626822979956,"suspect":false},{"mint":"ANokrV2CZVt9ngdnpvtyxYJzNx4WodDJrHEAt6qspump","name":"yyyyyyy","symbol":"yyyyyyy","ts":1737310650,"time":"18:17:30","twitter":true,"website":false,"telegram":false,"socials":1,"label":"high","return_ratio":-0.9355345520797592,"min_ratio":0.053797469391795,"suspect":false},{"mint":"3jBnzRHwinwU2p3WTw78tNrMYx2i2a6wNqCE4pGXpump","name":"Lynor AI","symbol":"LYNOR","ts":1737310737,"time":"18:18:57","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.9255884998500532,"min_ratio":0.0451000403783068,"suspect":false},{"mint":"AjxcLSnjAE6vQYoQPYovnkTwsW92aRAugHGREZtmpump","name":"Trump Dollar","symbol":"TUSD","ts":1737311053,"time":"18:24:13","twitter":true,"website":false,"telegram":false,"socials":1,"label":"high","return_ratio":-0.7129983909537259,"min_ratio":0.0694657820061382,"suspect":false},{"mint":"xrNTgAHezdVebde8nYsCsWRb1uayqDWtCL9ydr7pump","name":"TRUMP47ElonDogeMagaHarrybtcinu","symbol":"TRUMP","ts":1737311095,"time":"18:24:55","twitter":true,"website":true,"telegram":true,"socials":3,"label":"high","return_ratio":0.2042601359888798,"min_ratio":0.4505410677538012,"suspect":false},{"mint":"5nXAhGgFizku2mmTAnBxL7owpRDYEhaRM7eZQQwKAVCU","name":"Official Musk","symbol":"MUSK","ts":1737311139,"time":"18:25:39","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.825154339382787,"min_ratio":0.0503327485032201,"suspect":false},{"mint":"5Ww6ftndqZwrteKNces8Ej3P1RjNSH8SaitePTXRpump","name":"AMERICAN COIN","symbol":"USACOIN","ts":1737311225,"time":"18:27:05","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.437296290551146,"min_ratio":0.4097656307809996,"suspect":false},{"mint":"7rAfcHjmT1g5GoNdbt5Kxy9EuE1AXmDinLUj1dbFpump","name":"WEBAIBOT","symbol":"WBot","ts":1737311307,"time":"18:28:27","twitter":true,"website":true,"telegram":true,"socials":3,"label":"high","return_ratio":-0.8991897340028545,"min_ratio":0.0450149048651531,"suspect":false},{"mint":"H9RgujEQZqRP9NRNZMRqofvHFTpejKqtTUyRvvu6pump","name":"Trump Dance","symbol":"TDANCE","ts":1737311443,"time":"18:30:43","twitter":false,"website":true,"telegram":false,"socials":1,"label":"high","return_ratio":-0.7036605953809496,"min_ratio":0.1051898156558761,"suspect":false},{"mint":"6D54JYd3sxbTt45DKDGqgdNykK1ccfgb5DZ55CmVpump","name":"Run it Back (TikTok)","symbol":"🏃💨","ts":1737311555,"time":"18:32:35","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.756786730303618,"min_ratio":0.1266284043272112,"suspect":false},{"mint":"3ErJEnNe46gB2f5woMYbTJskVKbNEEbqcQ7U6J53pump","name":"Official World Liberty Fi ","symbol":"WLFI","ts":1737311594,"time":"18:33:14","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.3122128213496069,"min_ratio":0.2072059589366519,"suspect":false},{"mint":"Gh41hQfJ8cbDSZUSKTFdeZz8fhjSRzxnNhWDrUHJpump","name":"Gambled On All Trumpcoins","symbol":"GOAT","ts":1737311640,"time":"18:34:00","twitter":true,"website":false,"telegram":false,"socials":1,"label":"high","return_ratio":-0.8838131978135365,"min_ratio":0.0793207403961492,"suspect":false},{"mint":"FgGo5canEoXjZE1JoyKwPGAQ7y3PW2eDdcNxodC8pump","name":"just buy $47 of this coin","symbol":"$47","ts":1737312032,"time":"18:40:32","twitter":false,"website":false,"telegram":false,"socials":0,"label":"medium","return_ratio":3.54486273989466,"min_ratio":0.6653320570628367,"suspect":false},{"mint":"78h6p56jvmaV9zC1UJj1p1S8LMpdpxm7Hb6Laedpump","name":"MAGABOLIC","symbol":"MAGABOLIC","ts":1737312073,"time":"18:41:13","twitter":false,"website":false,"telegram":false,"socials":0,"label":"medium","return_ratio":-0.5579996571574712,"min_ratio":0.3557884849229531,"suspect":false},{"mint":"5WwYiYU8XqnnXhL7t6zhQuh13zzmdCW6vqRdyGv2pump","name":"Official Ronaldo Coin","symbol":"CR7","ts":1737312114,"time":"18:41:54","twitter":true,"website":false,"telegram":true,"socials":2,"label":"high","return_ratio":-0.666817332044483,"min_ratio":0.5577867835325343,"suspect":false},{"mint":"FfUFx46NCKoUjjCFNc3M4XrcXnqFmpn449QLy1xspump","name":"Official Trump Shooter Coin","symbol":"SHOOTER","ts":1737312592,"time":"18:49:52","twitter":true,"website":true,"telegram":true,"socials":3,"label":"high","return_ratio":-0.4325086576991468,"min_ratio":0.6236193442126572,"suspect":false},{"mint":"EbDGQaBuba8vS769P1TdksGSA6ZgfgDeC6EFGmZTpump","name":"TRUMP2.0","symbol":"Abela","ts":1737312866,"time":"18:54:26","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.46216522889751,"min_ratio":0.0445786236360752,"suspect":false},{"mint":"9XcefgUMsUWkHcmHWX1g8cKZzr9hsL6pQsupBvH4pump","name":"PERSON OF THE YEAR ","symbol":"POTY","ts":1737313168,"time":"18:59:28","twitter":false,"website":false,"telegram":false,"socials":0,"label":"high","return_ratio":0.960252582787603,"min_ratio":0.8138081101131406,"suspect":false},{"mint":"48w9T2SBntRVV4eateLvyvDTMbc7w9iCiBfwxgw9pump","name":"web3book","symbol":"w3b络","ts":1737313341,"time":"19:02:21","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.9182091093068532,"min_ratio":0.072010428065087,"suspect":false},{"mint":"exWb7v3zN7XFtcVXPTaLcdYh1tpKJqHL3BFHekTpump","name":"SUKI すきby Swarm","symbol":"SUKI","ts":1737313427,"time":"19:03:47","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.4386271735812905,"min_ratio":0.203375387354596,"suspect":false},{"mint":"9mDCq4ZwDhEZ4AXkgcv9LBjvrhKxUNdLHBTpddJ8pump","name":"First Truth Social Post","symbol":"PRESIDENT","ts":1737313822,"time":"19:10:22","twitter":true,"website":false,"telegram":false,"socials":1,"label":"high","return_ratio":-0.9004116924161102,"min_ratio":0.0566642939201929,"suspect":false},{"mint":"DbkDLDVpRthFfDBS563BzPwpWPGbaXb1vEC1YFvqpump","name":"Sigma AI","symbol":"SigmaAI","ts":1737313882,"time":"19:11:22","twitter":true,"website":true,"telegram":false,"socials":2,"label":"high","return_ratio":-0.9053928884159642,"min_ratio":0.0604448837505748,"suspect":false},{"mint":"FTknq2o8NNV8uMHHExD3o2iDCWAJjrTSVLqpLCsjpump","name":"To Retire Ur Mum Properly","symbol":"TRUMP","ts":1737313976,"time":"19:12:56","twitter":false,"website":false,"telegram":false,"socials":0,"label":"high","return_ratio":-0.925458177634692,"min_ratio":0.0507463810715059,"suspect":false}],"summary":{"window_start":"2025-01-19 17:52 UTC","window_end":"2025-01-19 19:12 UTC","window_minutes":80.8,"dataset_n":26996,"high_pct":78.4,"low_pct":5.9,"median_return":-0.6622,"p25":-0.8509,"p75":-0.1841,"hit_rate":20.2,"below20":56.7,"top200_high":86,"socials_table":[{"n":0,"count":6171,"high_pct":72.4,"median":-0.522},{"n":1,"count":7986,"high_pct":78.6,"median":-0.696},{"n":2,"count":8188,"high_pct":83.1,"median":-0.748},{"n":3,"count":4651,"high_pct":77.8,"median":-0.582}],"window_mix":{"high":27,"medium":5},"window_selection":"godtyckligt: mitten av datasetet i tidsordning, ingen selektion på utfall"}};
+  const { window: coins, summary } = DATA;
+
+  let selected = 0;
+  let filter = 'all';
+  let revealed = false;
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  /* Avatar ur mintadressen. IPFS-bilderna som pump.fun visar kan inte laddas
+     här (sidans CSP tillåter inga externa bilder), så färg och initialer
+     härleds deterministiskt ur adressen istället för att lämna hål. */
+  function avatarFor(mint, symbol) {
+    let h = 0;
+    for (let i = 0; i < mint.length; i++) h = (h * 31 + mint.charCodeAt(i)) >>> 0;
+    const hue = h % 360;
+    const initials = (symbol || mint).slice(0, 2).toUpperCase();
+    return { bg: `hsl(${hue} 62% 62%)`, initials };
+  }
+
+  /* Vad som faktiskt är känt vid beslutstidpunkten.
+     Ingen bedömning här. I replay finns bara socials, och socials-tabellen
+     bredvid visar att de inte separerar utfall (72/79/83/78 % high-risk).
+     Att ändå sätta ett KÖP eller SKIPPA vore falsk precision — precis det
+     verktyget finns för att ersätta. Chippet visar täckningsgrad, inte råd. */
+  const SIGNALS = [
+    { id: 'socials', label: 'socials', live: false },
+    { id: 'creator', label: 'creator-historik', live: true },
+    { id: 'opening', label: 'öppningsandel', live: true },
+    { id: 'traction', label: 'organisk traktion', live: true },
+  ];
+
+  function assess(c) {
+    const known = [];
+    const missing = [];
+    for (const sig of SIGNALS) {
+      if (sig.id === 'socials') {
+        known.push({ text: c.socials > 0 ? `${c.socials} socials` : 'inga socials', on: c.socials > 0 });
+      } else {
+        missing.push({ text: `${sig.label} — kräver live`, on: false, unknown: true });
+      }
+    }
+    return { known: 1, total: SIGNALS.length, reasons: [...known, ...missing], hasSocials: c.socials > 0 };
+  }
+
+    function renderTicker() {
+    document.getElementById('ticker').innerHTML = `
+      <span>high-risk <b class="bad">${summary.high_pct} %</b></span>
+      <span>median <b class="bad">${(summary.median_return * 100).toFixed(0)} %</b></span>
+      <span>träff <b>${summary.hit_rate} %</b></span>
+      <span>n <b>${summary.dataset_n.toLocaleString('sv-SE')}</b></span>`;
+  }
+
+  function renderGrid() {
+    const list = coins
+      .map((c, i) => ({ c, i, a: assess(c) }))
+      .filter(({ a }) => filter === 'all'
+        || (filter === 'social' && a.hasSocials)
+        || (filter === 'nosocial' && !a.hasSocials));
+
+    document.getElementById('grid').innerHTML = list.map(({ c, i, a }) => {
+      const av = avatarFor(c.mint, c.symbol);
+      const win = c.return_ratio > 0;
+      const retText = c.suspect
+        ? 'orimligt värde'
+        : (c.return_ratio >= 1 ? `${(c.return_ratio + 1).toFixed(1)}×` : `${(c.return_ratio * 100).toFixed(0)} %`);
+
+      return `<button type="button" class="coin" data-i="${i}" aria-selected="${i === selected}">
+        <div class="coin-head">
+          <span class="avatar" style="background:${av.bg}">${esc(av.initials)}</span>
+          <span class="coin-id">
+            <div class="coin-sym">${esc(c.symbol || '—')}</div>
+            <div class="coin-name">${esc(c.name || 'utan namn')}</div>
+          </span>
+          <span class="coin-time">${esc(c.time)}</span>
+        </div>
+        <span class="verdict partial">${a.known}/${a.total} SIGNALER</span>
+        <div class="signals">
+          ${a.reasons.map((r) => `<span class="sig ${r.unknown ? 'off' : r.on ? 'on' : 'off'}">${esc(r.text)}</span>`).join('')}
+        </div>
+        ${revealed ? `<div class="outcome">
+            <span class="lab">${esc(c.label)}-risk · botten ${(c.min_ratio * 100).toFixed(0)} %</span>
+            ${c.suspect
+              ? `<span class="suspect">${retText}</span>`
+              : `<span class="r ${win ? 'win' : 'loss'}">${retText}</span>`}
+          </div>` : ''}
+      </button>`;
+    }).join('') || '<p style="color:var(--faint)">Inga mynt i det filtret.</p>';
+
+    document.querySelectorAll('.coin').forEach((el) => {
+      el.addEventListener('click', () => { selected = Number(el.dataset.i); renderGrid(); renderDossier(); });
+    });
+  }
+
+  function renderDossier() {
+    const c = coins[selected];
+    const av = avatarFor(c.mint, c.symbol);
+    const a = assess(c);
+
+    document.getElementById('dossier').innerHTML = `
+      <h3>Dossier</h3>
+      <div class="dossier-head">
+        <span class="avatar" style="background:${av.bg}">${esc(av.initials)}</span>
+        <span>
+          <div class="dossier-sym">${esc(c.symbol || '—')}</div>
+          <div style="color:var(--faint);font-size:12px">${esc(c.name || 'utan namn')}</div>
+        </span>
+      </div>
+      <div class="mintline"><b>mint</b><br>${esc(c.mint)}</div>
+      <dl class="kv">
+        <div class="kv-row"><dt>Launch</dt><dd class="mono">${esc(c.time)} UTC</dd></div>
+        <div class="kv-row"><dt>Socials</dt><dd class="mono">${
+          [c.twitter && 'twitter', c.website && 'website', c.telegram && 'telegram']
+            .filter(Boolean).join(' · ') || '—'}</dd></div>
+        <div class="kv-row"><dt>Signaltäckning</dt><dd><span class="verdict partial">${a.known} av ${a.total}</span></dd></div>
+        <div class="kv-row"><dt>Creator</dt><dd class="unknown">Okänd i replay — MELT:s publika fil har ingen creator</dd></div>
+        <div class="kv-row"><dt>Öppningsandel</dt><dd class="unknown">Kräver launchtransaktionen</dd></div>
+        ${revealed ? `
+        <div class="kv-row"><dt>Utfall</dt><dd class="mono ${c.return_ratio > 0 ? '' : ''}" style="color:${c.return_ratio > 0 ? 'var(--green)' : 'var(--red)'}">${
+          c.suspect ? 'orimligt värde i datan'
+            : c.return_ratio >= 1 ? `${(c.return_ratio + 1).toFixed(1)}×`
+            : `${(c.return_ratio * 100).toFixed(1)} %`}</dd></div>
+        <div class="kv-row"><dt>Riskklass</dt><dd class="mono">${esc(c.label)}</dd></div>
+        <div class="kv-row"><dt>Lägsta pris</dt><dd class="mono">${(c.min_ratio * 100).toFixed(1)} % av migration</dd></div>` : ''}
+      </dl>
+      <p class="hint" style="margin:12px 0 0">
+        De två okända fälten är precis vad live-läget fyller i.
+        Creator-historiken kommer ur den egna inspelningen; öppningsandelen ur
+        launchtransaktionen. Ingen av dem finns i något publikt dataset.
+      </p>`;
+  }
+
+  function renderBaseRate() {
+    document.getElementById('baserate').innerHTML = [
+      ['High-risk', `${summary.high_pct} %`, 'bad'],
+      ['Low-risk', `${summary.low_pct} %`, 'good'],
+      ['Under 20 % av migration', `${summary.below20} %`, 'bad'],
+      ['Median-avkastning', `${(summary.median_return * 100).toFixed(1)} %`, 'bad'],
+      ['p25 / p75', `${(summary.p25 * 100).toFixed(0)} % / ${(summary.p75 * 100).toFixed(0)} %`, ''],
+      ['Andel i plus', `${summary.hit_rate} %`, ''],
+      ['Högrisk bland topp-200', `${summary.top200_high} av 200`, 'bad'],
+    ].map(([k, v, cls]) => `<div class="br-row"><span>${k}</span><b class="${cls}">${v}</b></div>`).join('');
+
+    document.getElementById('socials').innerHTML = summary.socials_table.map((r) =>
+      `<tr><td>${r.n}</td><td>${r.count.toLocaleString('sv-SE')}</td><td>${r.high_pct} %</td><td>${(r.median * 100).toFixed(0)} %</td></tr>`
+    ).join('');
+  }
+
+  document.querySelectorAll('.filters button[data-f]').forEach((b) => {
+    b.addEventListener('click', () => {
+      filter = b.dataset.f;
+      document.querySelectorAll('.filters button[data-f]').forEach((o) =>
+        o.setAttribute('aria-pressed', String(o === b)));
+      renderGrid();
+    });
+  });
+
+  document.getElementById('reveal').addEventListener('click', (e) => {
+    revealed = !revealed;
+    e.currentTarget.setAttribute('aria-pressed', String(revealed));
+    e.currentTarget.textContent = revealed ? 'dölj utfall' : 'visa utfall';
+    renderGrid();
+    renderDossier();
+  });
+
+  renderTicker();
+  renderGrid();
+  renderDossier();
+  renderBaseRate();
+</script>

@@ -1,0 +1,16 @@
+{
+  "name": "memecoin-edge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Early-detection och rug-filter for nya memecoins. Noll externa beroenden.",
+  "engines": { "node": ">=20.11" },
+  "scripts": {
+    "start": "node src/index.js",
+    "sim": "MODE=sim node src/index.js",
+    "doctor": "node src/doctor.js",
+    "preview": "node src/preview.js",
+    "backtest": "node src/backtest.js",
+    "test": "node --test"
+  }
+}

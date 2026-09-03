@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>memecoin-edge</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🎯</text></svg>">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>memecoin<span>-edge</span></h1>
+      <span class="source" id="mode">ansluter…</span>
+    </div>
+    <div class="thesis">
+      Traktion är publik. Uppmärksamhet är köpt. <b>Edgen är gapet.</b>
+    </div>
+    <div class="conn" id="conn" data-state="connecting">live</div>
+  </header>
+
+  <main>
+    <section class="feed">
+      <div class="section-head">
+        <h2>Beslut</h2>
+        <p>Köp överst. Varje köp har storlek, ogiltighetsvillkor och utgångsplan — annars är det ingen rekommendation.</p>
+      </div>
+      <div id="board" class="cards"></div>
+      <p class="empty" id="empty">Väntar på första hämtningen…</p>
+    </section>
+
+    <aside>
+      <section class="panel">
+        <h2>Kvadranten</h2>
+        <p class="hint">Vågrätt: uppmärksamhet. Lodrätt: organisk traktion. Du vill vara uppe till vänster.</p>
+        <div id="scatter"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Tratten</h2>
+        <div id="funnel" class="funnel"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Journal <span class="tag">riktiga priser</span></h2>
+        <p class="hint">Köp mot kontrollgrupp, netto efter handelskostnad. Detta är enda beviset på om verktyget har edge.</p>
+        <div id="journal"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Kalibrering</h2>
+        <p class="hint">Vad dina egna signalintervall historiskt gav. Påverkar konviktionen först vid tillräckligt underlag.</p>
+        <div id="calibration"></div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runner Lab</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2300e070'/><text x='16' y='23' font-size='17' font-family='monospace' font-weight='bold' text-anchor='middle' fill='%23041a0d'>R</text></svg>">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand"><span class="mark">R</span>RUNNER<em>LAB</em></div>
+
+  <div class="search">
+    <input id="ca" type="text" placeholder="Sök CA, ticker eller namn" spellcheck="false" autocomplete="off">
+    <kbd>/</kbd>
+  </div>
+
+  <div class="meters">
+    <span class="meter"><i class="dot" id="dot"></i><b id="state">ansluter</b></span>
+    <span class="meter" title="tid mellan serveruppdateringar">·<b id="lat">—</b></span>
+    <span class="meter" title="listningar sedda">L<b id="mL">0</b></span>
+    <span class="meter" title="trade-event">T<b id="mT">0</b></span>
+    <span class="meter" title="arkiverade event">A<b id="mA">0</b></span>
+    <span class="meter" title="spårade mints">S<b id="mS">0</b></span>
+  </div>
+
+  <button type="button" class="ghost" id="help" aria-expanded="false">?</button>
+</header>
+
+<div class="helpbar" id="helpbar" hidden>
+  <div><b>Kolumnerna</b> följer pump.fun:s livscykel: ny listning → bonding curve fylls → migration till DEX.</div>
+  <div><b>Kvalificerad</b> betyder att en token har riktig aktivitet och är värd nätverksanrop — inte att den är säker.</div>
+  <div><b>okänd ≠ godkänd.</b> En kontroll som inte kunde köras visas gul och räknas aldrig som passerad.</div>
+</div>
+
+<main class="lanes" id="lanes"></main>
+
+<aside class="drawer" id="drawer" hidden></aside>
+<div class="scrim" id="scrim" hidden></div>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>
