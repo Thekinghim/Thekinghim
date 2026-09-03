@@ -1,0 +1,46 @@
+# Fly.io. Tre inställningar är inte valfria för det här verktyget:
+#   - en volym, annars nollställs creator-registret vid varje deploy
+#   - auto_stop av, annars slutar den spela in när ingen tittar
+#   - en maskin, annars håller varje maskin sin egen halva av strömmen
+app = "runner-lab"
+primary_region = "arn"          # Stockholm. Byt till din närmaste region.
+
+[build]
+
+[env]
+  PORT = "4173"
+  HOST = "0.0.0.0"
+  DATA_DIR = "/data/"
+
+# Arkivet och creator-registret. Utan den här raden börjar produktens enda
+# icke-kopierbara tillgång om från noll varje gång du deployar.
+[[mounts]]
+  source = "runner_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 4173
+  force_https = true
+  # Ingen scale-to-zero. Sover instansen missar den listningar, och det som
+  # missas går inte att hämta i efterhand.
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    # Varje besökare håller en öppen SSE-anslutning, inte en request i taget.
+    type = "connections"
+    soft_limit = 350
+    hard_limit = 450
+
+[checks.health]
+  type = "http"
+  port = 4173
+  path = "/health"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "20s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
