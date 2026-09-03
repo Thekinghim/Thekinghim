@@ -16,7 +16,7 @@ export class Radar {
     this.handlers = handlers;
     /** @type {Map<string, any>} */
     this.tokens = new Map();
-    this.counters = { launches: 0, trades: 0, qualified: 0, migrations: 0, dropped: 0 };
+    this.counters = { launches: 0, trades: 0, qualified: 0, migrations: 0, dropped: 0, devSells: 0 };
   }
 
   /** @param {*} raw PumpPortal create-event. */
@@ -42,6 +42,17 @@ export class Radar {
       migratedAt: null,
       preflight: null,
       holders: null,
+      /**
+       * Deployerns egna säljningar.
+       *
+       * Creator-walleten står i launch-eventet och varje handel bär sin
+       * wallet, så det här är inte en uppskattning — det är samma adress
+       * eller inte. Ingen annan signal i verktyget är lika entydig, och det
+       * är den enda som ensam räcker för att aldrig röra en token.
+       */
+      devSells: 0,
+      devSoldSol: 0,
+      devSoldAt: null,
     };
     this.tokens.set(raw.mint, entry);
     this.handlers.onNew?.(entry);
@@ -53,6 +64,14 @@ export class Radar {
     const entry = this.tokens.get(raw?.mint);
     if (!entry) return;
     this.counters.trades++;
+
+    if (raw.txType === 'sell' && entry.creator && raw.traderPublicKey === entry.creator) {
+      entry.devSells++;
+      entry.devSoldSol += Number(raw.solAmount ?? 0);
+      entry.devSoldAt = Date.now();
+      this.counters.devSells++;
+      this.handlers.onDevSell?.(entry, Number(raw.solAmount ?? 0));
+    }
 
     entry.window.add({
       ts: Date.now(),
@@ -176,6 +195,9 @@ export class Radar {
         preflight: entry.preflight,
         holders: entry.holders,
         earlyExits: entry.window.earlyBuyersExited(),
+        devSells: entry.devSells,
+        devSoldSol: entry.devSoldSol,
+        devSoldAt: entry.devSoldAt,
         // Kvalificering är klibbig — anropen är redan spenderade och ska inte
         // spenderas om. Men ett flöde som vänt måste synas, annars ser en
         // token som dumpas fortfarande ut som en kandidat.

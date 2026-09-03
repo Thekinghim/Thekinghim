@@ -114,6 +114,79 @@ Det är skillnaden mellan "lita på mig" och "här är siffrorna".
 
 ---
 
+## Funktionsidéer, rankade efter värde per arbetstimme
+
+Allt nedan går att räkna ut från strömmen vi redan tar emot eller från gratis
+RPC. Inget kräver en betald datakälla.
+
+### Byggd: dev-säljlarm ✅
+
+Creator-walleten står i launch-eventet och varje handel bär sin wallet. Alltså
+går det att se **exakt** när deployern säljer sin egen token — samma adress
+eller inte, ingen tolkning.
+
+Det är den enda signalen i hela verktyget som ensam räcker för att aldrig röra
+en token, och den ligger nu först bland de diskvalificerande.
+
+### 1. Bundle-detektion — H1 i din PLAN.md
+
+Wallets som köper i samma block som listningen är nästan alltid deployerns
+egna. Slå ihop dem och räkna om topp-10-andelen. Publicerad forskning visar
+24 procentenheters skillnad efter klustring mot 6 före.
+
+RugCheck och DexScreener visar den råa siffran. **Ingen visar deltat.**
+
+### 2. Graduation-ETA
+
+Kurvans lutning över de senaste minuterna ger en uppskattad tid till migration.
+"Graduerar om ~4 min i nuvarande takt" är det mest handlingsbara på hela sidan,
+och ingen annan terminal räknar det.
+
+### 3. Wallet-spårare ur egen inspelning
+
+Wallets som återkommande köper tidigt i tokens som sedan graduerar. Byggs ur
+`data/events/`, blir bättre för varje dygn, och går inte att köpa.
+
+Publika "smart money"-listor är gamed — folk bygger meritlista på en wallet med
+avsikt och använder den sedan som exit-likviditet. En lista du räknat själv,
+som du inte publicerar, har inte det problemet.
+
+### 4. Copycat-detektion
+
+En ny token med samma namn eller ticker som något som springer just nu är
+nästan alltid ett derivat som rider på uppmärksamheten. Trivialt att räkna ur
+arkivet, och fångar en hel kategori.
+
+### 5. Wallet-kluster över tokens
+
+Samma grupp wallets som dyker upp tidigt i launch efter launch är en
+koordinerad grupp. Det är heuristik 4 i din CLAUDE.md och den svåraste att
+manipulera, eftersom den kräver att man byter wallets varje gång.
+
+### 6. Finansieringsspår för deployern
+
+Var fick deployern sin SOL ifrån? Är samma finansiär kopplad till femtio andra
+listningar är det en fabrik, inte en person. Ett `getSignaturesForAddress` per
+ny deployer.
+
+### 7. Whale-ackumulering
+
+Poll om topp-innehavare med några minuters mellanrum och se om **en** wallet
+växer. Skillnaden mellan bred spridning och en wallet som samlar är osynlig i
+en ögonblicksbild men tydlig i en serie.
+
+### 8. Larm till Telegram
+
+Webhook när KÖP fyrar. Terminalen kan inte kräva att man tittar på den.
+
+### 9. Post mortem på graduerade
+
+För varje token som graduerade: visa hur signalerna såg ut minut för minut på
+vägen dit. Det bygger mönsterbiblioteket, och det är det bästa säljmaterial som
+finns eftersom det är verkligt.
+
+---
+
 ## P3 — Edgen
 
 ### 11. Bundle-detektion (H1 i din PLAN.md)

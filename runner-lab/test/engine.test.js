@@ -284,3 +284,35 @@ test('lyftet mäter KÖP mot flödet i stort', () => {
   // Basen är 5/30; KÖP ligger klart över den.
   assert.ok(s.lift > 2, `väntade tydligt lyft, fick ${s.lift}`);
 });
+
+test('dev som säljer sin egen token upptäcks och diskvalificerar', () => {
+  const sells = [];
+  const r = new Radar({ onDevSell: (e, sol) => sells.push([e.mint, sol]) });
+  r.onLaunch({ mint: 'd1', symbol: 'D', traderPublicKey: 'devwallet' });
+
+  // Andra wallets som säljer är normalt och ska inte flaggas.
+  r.onTrade({ mint: 'd1', txType: 'sell', solAmount: 5, traderPublicKey: 'någon-annan' });
+  assert.equal(sells.length, 0);
+
+  r.onTrade({ mint: 'd1', txType: 'sell', solAmount: 2.5, traderPublicKey: 'devwallet' });
+  assert.deepEqual(sells, [['d1', 2.5]]);
+
+  const row = r.board()[0];
+  assert.equal(row.devSells, 1);
+  assert.ok(Math.abs(row.devSoldSol - 2.5) < 1e-9);
+  assert.equal(verdictFor(row).verdict, 'SKIPPA');
+  assert.match(verdictFor(row).reason, /dev har sålt/);
+});
+
+test('dev-sälj slår igenom även när allt annat ser perfekt ut', () => {
+  const perfect = row({ devSells: 1, devSoldSol: 3.2 });
+  assert.equal(verdictFor(row()).verdict, 'KÖP', 'utan dev-sälj ska den vara KÖP');
+  assert.equal(verdictFor(perfect).verdict, 'SKIPPA');
+});
+
+test('en dev som köper flaggas inte', () => {
+  const r = new Radar();
+  r.onLaunch({ mint: 'd2', traderPublicKey: 'dev2' });
+  r.onTrade({ mint: 'd2', txType: 'buy', solAmount: 1, traderPublicKey: 'dev2' });
+  assert.equal(r.board()[0].devSells, 0);
+});

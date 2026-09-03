@@ -38,6 +38,16 @@ export function verdictFor(row) {
   const dev = row.creatorOpeningShare;
 
   // ---- Diskvalificerande ----
+  // Deployern som säljer sin egen token står först. Det är den enda signalen
+  // som inte kräver någon tolkning alls: samma wallet som skapade token
+  // lämnar den. Allt annat på listan är sannolikheter; det här är ett faktum.
+  if (row.devSells > 0) {
+    return {
+      verdict: 'SKIPPA',
+      reason: `dev har sålt ${row.devSoldSol.toFixed(2)} SOL av sin egen token`,
+      missing: [],
+    };
+  }
   if (pf?.checks?.authority?.state === 'fail') {
     return { verdict: 'SKIPPA', reason: pf.checks.authority.detail, missing: [] };
   }

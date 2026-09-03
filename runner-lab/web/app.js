@@ -229,7 +229,7 @@ function signature(t) {
   const m = t.metrics;
   return [
     t.verdict?.verdict, t.verdict?.reason, t.lane, t.tracking, t.qualified,
-    t.probeExpired, t.flowReversed, t.migratedAt, t.earlyExits,
+    t.probeExpired, t.flowReversed, t.migratedAt, t.earlyExits, t.devSells,
     t.preflight?.checks?.authority?.state, t.holders?.topHolderPct?.toFixed(0),
     t.creatorOpeningShare?.toFixed(1), t.curveProgress?.toFixed(3),
     m.uniqueBuyers, m.uniqueSellers, m.netSol.toFixed(2), mcOf(t).toFixed(1),
@@ -250,6 +250,7 @@ function rowHtml(t) {
   const vcls = v.verdict === 'KÖP' ? 'buy' : v.verdict === 'SKIPPA' ? 'skip' : 'wait';
 
   const pills = [];
+  if (t.devSells > 0) pills.push(['bad', `DEV SÅLT ${fmt(t.devSoldSol, 2)} SOL`]);
   if (t.flowReversed) pills.push(['bad', 'flödet vänt']);
   if (t.creatorOpeningShare !== null) {
     const d = t.creatorOpeningShare;

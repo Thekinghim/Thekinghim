@@ -51,6 +51,13 @@ const radar = new Radar({
     );
     dirty = true;
   },
+  onDevSell: (entry, sol) => {
+    console.log(
+      `\x1b[31m[DEV SÄLJER]\x1b[0m ${(entry.symbol || entry.mint.slice(0, 8)).padEnd(12)} ` +
+      `${sol.toFixed(3)} SOL · totalt ${entry.devSoldSol.toFixed(2)} · ${entry.mint}`,
+    );
+    dirty = true;
+  },
   onMigration: (entry) => {
     creators.recordGraduation(entry.mint);
     outcomes.recordGraduation(entry.mint);
