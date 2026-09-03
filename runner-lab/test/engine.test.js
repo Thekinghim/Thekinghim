@@ -206,3 +206,81 @@ test('för svag traktion ger VÄNTA, inte SKIPPA', () => {
   assert.equal(verdictFor(row({ metrics: { ...row().metrics, uniqueBuyers: 5 } })).verdict, 'VÄNTA');
   assert.equal(verdictFor(row({ metrics: { ...row().metrics, netSol: 0.1 } })).verdict, 'VÄNTA');
 });
+
+/* ---------- utfallsboken ---------- */
+import { OutcomeLedger } from '../src/engine/outcomes.js';
+
+const graded = (mint, verdict, over = {}) => ({
+  mint, symbol: mint.toUpperCase(), creator: 'dev', ageSec: 90,
+  launchMarketCapSol: 30, curveProgress: 0.1,
+  verdict: { verdict, reason: 'test' },
+  metrics: { marketCapSol: 30, uniqueBuyers: 15 },
+  ...over,
+});
+
+test('bara den första domen per token bokförs', () => {
+  const l = new OutcomeLedger({ dir: tmp() });
+  assert.equal(l.grade(graded('a', 'VÄNTA')), true);
+  // En dom som får skrivas över i efterhand mäter efterklokhet, inte träff.
+  assert.equal(l.grade(graded('a', 'KÖP')), false);
+  assert.equal(l.rows.get('a').verdict, 'VÄNTA');
+});
+
+test('en rad utan omdöme bokförs inte', () => {
+  const l = new OutcomeLedger({ dir: tmp() });
+  assert.equal(l.grade({ mint: 'x', metrics: {} }), false);
+  assert.equal(l.rows.size, 0);
+});
+
+test('graduation registreras och överlever omstart', () => {
+  const dir = tmp();
+  const l = new OutcomeLedger({ dir });
+  l.grade(graded('b', 'KÖP'));
+  assert.equal(l.recordGraduation('b'), true);
+  assert.equal(l.recordGraduation('b'), false, 'samma graduation två gånger');
+
+  const reloaded = new OutcomeLedger({ dir });
+  assert.equal(reloaded.rows.get('b').graduated, true);
+});
+
+test('toppnoteringen är en undre gräns och går bara uppåt', () => {
+  const l = new OutcomeLedger({ dir: tmp() });
+  l.grade(graded('c', 'KÖP', { metrics: { marketCapSol: 30, uniqueBuyers: 15 } }));
+  l.mark('c', 90);
+  l.mark('c', 45);
+  assert.equal(l.rows.get('c').peakMcap, 90);
+  assert.equal(l.rows.get('c').peakIsLowerBound, true);
+});
+
+test('färska domar räknas inte som misslyckade', () => {
+  const l = new OutcomeLedger({ dir: tmp() });
+  l.grade(graded('d', 'KÖP'));
+  const s = l.stats();
+  assert.equal(s.classes['KÖP'].graded, 1);
+  assert.equal(s.classes['KÖP'].settled, 0, 'en färsk dom är inte avgjord');
+  assert.equal(s.classes['KÖP'].pending, 1);
+  assert.equal(s.classes['KÖP'].graduationRate, null, 'utan underlag: ingen siffra');
+});
+
+test('lyftet mäter KÖP mot flödet i stort', () => {
+  const l = new OutcomeLedger({ dir: tmp() });
+  const old = Date.now() - 7 * 3600_000;
+
+  // Tio KÖP varav fyra graduerar, tjugo SKIPPA varav en.
+  for (let i = 0; i < 10; i++) {
+    l.grade(graded(`buy${i}`, 'KÖP'));
+    l.rows.get(`buy${i}`).gradedAt = old;
+    if (i < 4) l.recordGraduation(`buy${i}`);
+  }
+  for (let i = 0; i < 20; i++) {
+    l.grade(graded(`skip${i}`, 'SKIPPA'));
+    l.rows.get(`skip${i}`).gradedAt = old;
+    if (i < 1) l.recordGraduation(`skip${i}`);
+  }
+
+  const s = l.stats();
+  assert.equal(s.classes['KÖP'].graduationRate, 0.4);
+  assert.equal(s.classes['SKIPPA'].graduationRate, 0.05);
+  // Basen är 5/30; KÖP ligger klart över den.
+  assert.ok(s.lift > 2, `väntade tydligt lyft, fick ${s.lift}`);
+});

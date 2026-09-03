@@ -5,12 +5,14 @@ import { createReplaySource } from './ingest/replay.js';
 import { EventStore } from './store/event-store.js';
 import { Radar } from './engine/radar.js';
 import { CreatorRegistry } from './engine/creators.js';
+import { OutcomeLedger } from './engine/outcomes.js';
 import { PreflightQueue } from './chain/preflight.js';
 import { readMintAuthorities, readTopHolders } from './chain/rpc.js';
 import { fetchTokenMetadata, metadataStats } from './chain/metadata.js';
 
 const store = new EventStore(config.store);
 const creators = new CreatorRegistry({ dir: config.store.dir });
+const outcomes = new OutcomeLedger({ dir: config.store.dir });
 
 let stream = null;
 let status = { state: 'startar', source: config.source, tracked: 0 };
@@ -51,6 +53,7 @@ const radar = new Radar({
   },
   onMigration: (entry) => {
     creators.recordGraduation(entry.mint);
+    outcomes.recordGraduation(entry.mint);
     console.log(`\x1b[36m[MIGRATION]\x1b[0m ${entry.symbol || entry.mint.slice(0, 8)}`);
     dirty = true;
   },
@@ -62,7 +65,12 @@ const handlers = {
   onMigration: (raw) => {
     store.append('migration', raw);
     // En migration kan gälla en mint vi aldrig såg födas (startade mitt i).
-    if (!radar.onMigration(raw)) creators.recordGraduation(raw.mint);
+    if (!radar.onMigration(raw)) {
+      // Migrationen kan gälla en mint vi aldrig såg födas, eller en som
+      // fallit ur radarn. Utfallet är lika giltigt då.
+      creators.recordGraduation(raw.mint);
+      outcomes.recordGraduation(raw.mint);
+    }
     dirty = true;
   },
   onStatus: (s) => { status = { ...status, ...s }; dirty = true; },
@@ -78,6 +86,7 @@ const app = {
       preflight: preflight.stats(),
       creators: creators.stats(),
       metadata: metadataStats(),
+      outcomes: outcomes.stats(),
       config: {
         windowMinutes: config.radar.windowMinutes,
         minUniqueBuyers: config.radar.minUniqueBuyers,
@@ -136,6 +145,13 @@ stream.start();
 // Push på egen takt. Ett svar kan innehålla hundratals händelser per sekund
 // och en sändning per händelse gör klienten obrukbar.
 setInterval(() => {
+  // Bokför domar som hunnit bli meningsfulla, och uppdatera toppnoteringar.
+  for (const row of radar.board(500)) {
+    if (row.preflight?.checks?.authority) outcomes.grade(row);
+    const mcap = row.metrics?.marketCapSol;
+    if (mcap > 0) outcomes.mark(row.mint, mcap);
+  }
+
   const { release } = radar.evict();
   for (const mint of release) stream.untrack?.(mint);
   if (!dirty) return;
@@ -151,8 +167,12 @@ server.listen(config.server.port, config.server.host, () => {
   console.log(`  Arkiv: ${config.store.dir}events/\n`);
 });
 
+// Toppnoteringar skrivs på egen takt i stället för vid varje handel.
+setInterval(() => outcomes.flush(), 30_000).unref();
+
 const shutdown = () => {
   stream.stop();
+  outcomes.flush();
   store.close();
   server.close(() => process.exit(0));
 };

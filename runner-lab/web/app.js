@@ -53,6 +53,61 @@ stream.addEventListener('error', () => {
   $('state').textContent = 'frånkopplad';
 });
 
+/* ---------- träffbild ----------
+   Ligger överst för att det är det första en betalande besökare vill se:
+   inte vad verktyget påstår nu, utan vad det påstod förut och hur det gick.
+
+   Siffror visas bara när de har underlag. En graduationsandel räknad på tre
+   domar är brus, och att visa den ändå är det snabbaste sättet att förlora
+   någon som förstår vad talet betyder. */
+const MIN_SETTLED = 20;
+
+function renderRecord() {
+  const o = snap.outcomes;
+  const el = $('record');
+  if (!o || !el) return;
+
+  const pct = (x) => (x === null ? '—' : `${(x * 100).toFixed(1)} %`);
+  const buy = o.classes['KÖP'];
+  const wait = o.classes['VÄNTA'];
+  const skip = o.classes['SKIPPA'];
+  const enough = (c) => c.settled >= MIN_SETTLED;
+
+  const cells = [
+    { label: 'Domar avgjorda',
+      value: String(buy.settled + wait.settled + skip.settled),
+      sub: `${o.totalGraded} bokförda · ${o.settleHours} h till avgörande` },
+
+    { label: 'KÖP graduerar',
+      value: enough(buy) ? pct(buy.graduationRate) : '—',
+      cls: enough(buy) ? 'good' : 'mut',
+      sub: enough(buy) ? `${buy.graduated} av ${buy.settled}` : `${buy.settled}/${MIN_SETTLED} avgjorda`,
+      lead: enough(buy) },
+
+    { label: 'Basfrekvens',
+      value: o.baseGraduationRate === null ? '—' : pct(o.baseGraduationRate),
+      sub: 'hela flödet' },
+
+    { label: 'Lyft mot flödet',
+      value: o.lift === null || !enough(buy) ? '—' : `${o.lift.toFixed(1)}×`,
+      cls: !enough(buy) ? 'mut' : o.lift >= 1.5 ? 'good' : o.lift < 1 ? 'bad' : '',
+      sub: enough(buy) ? 'KÖP mot basen' : `kräver ${MIN_SETTLED} avgjorda` },
+
+    { label: 'SKIPPA graduerar',
+      value: enough(skip) ? pct(skip.graduationRate) : '—',
+      cls: enough(skip) ? '' : 'mut',
+      sub: enough(skip) ? 'ska ligga under basen' : `${skip.settled}/${MIN_SETTLED} avgjorda` },
+
+    { label: 'Median topp, KÖP',
+      value: buy.medianPeakMultiple === null || !enough(buy) ? '—' : `${buy.medianPeakMultiple.toFixed(2)}×`,
+      sub: 'undre gräns' },
+  ];
+
+  el.innerHTML = cells.map((c) =>
+    `<div class="rec ${c.lead ? 'lead' : ''}"><span>${esc(c.label)}</span>` +
+    `<b class="${c.cls ?? ''}">${esc(c.value)}</b><i>${esc(c.sub)}</i></div>`).join('');
+}
+
 /* ---------- rendering ---------- */
 function render() {
   if (!snap) return;
@@ -63,6 +118,8 @@ function render() {
   $('mT').textContent = snap.counters.trades;
   $('mA').textContent = snap.store.written;
   $('mS').textContent = `${s.tracked ?? 0}/${snap.config.maxTracked}`;
+
+  renderRecord();
 
   const q = query.toLowerCase();
   const match = (t) => !q ||

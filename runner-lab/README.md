@@ -62,6 +62,32 @@ Det är inte en detalj. Utan arkiv finns ingen framtida backtest, och
 `npm run replay` kör uppspelningen genom exakt samma kod som live — annars
 divergerar de två och man vet aldrig vilken som validerades.
 
+## Träffbilden
+
+`data/outcomes.ndjson` bokför varje dom och vad som sedan hände. Utfallsmåttet
+är **graduation** — att bonding curve fylls och token migrerar.
+
+Valet är inte godtyckligt. Det är binärt, det observeras på den gratis
+`subscribeMigration`-strömmen även för mints vi slutat prenumerera på, och det
+är sällsynt nog att bära information. Ett avkastningsmått hade krävt att vi
+betalade för att följa varje token i timmar.
+
+Tre regler som gör siffran ärlig:
+
+- **Bara första domen räknas.** En dom som får skrivas över när token redan
+  börjat springa mäter efterklokhet, inte träffsäkerhet.
+- **Färska domar räknas inte som misslyckade.** En dom är avgjord när den
+  graduerat eller passerat sex timmar.
+- **Inga siffror utan underlag.** Under 20 avgjorda domar visar panelen `—`.
+  En graduationsandel räknad på tre domar är brus.
+
+Talet som avgör allt är **lyftet**: hur mycket oftare KÖP graduerar än flödet
+i stort. Ligger det inte tydligt över 1 tillför omdömet ingenting, och då ska
+det förenklas — inte kompletteras med fler signaler.
+
+Toppnoteringen bokförs också men mäts bara medan token var spårad, så den är
+en undre gräns och märks som sådan.
+
 ## Creator-registret
 
 `data/launches.ndjson` växer för varje dygn verktyget körs: vilken wallet som
