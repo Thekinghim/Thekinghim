@@ -156,16 +156,20 @@ jobs:
         # steget är enda sättet att se varför en instans inte svarade — utan
         # det är en misslyckad hälsokontroll en gissningslek. --no-tail gör
         # att kommandot returnerar i stället för att strömma för evigt.
+        #
+        # `tee` skriver till både jobbsammanfattningen och den vanliga
+        # loggen. Bara sammanfattningen räcker inte — den går inte att läsa
+        # via samma API som resten av jobbets utdata.
         if: failure()
         working-directory: runner-lab
         run: |
-          echo "### Fly-loggar (senaste rader, --no-tail)" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          flyctl logs --app "$APP" --no-tail 2>&1 | tail -150 >> "$GITHUB_STEP_SUMMARY" || \
-            echo "(flyctl logs misslyckades också)" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-          echo "### Maskinstatus" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          flyctl status --app "$APP" 2>&1 >> "$GITHUB_STEP_SUMMARY" || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Fly-loggar (senaste rader, --no-tail)"
+            echo '```'
+            flyctl logs --app "$APP" --no-tail 2>&1 | tail -150 || echo "(flyctl logs misslyckades)"
+            echo '```'
+            echo "### Maskinstatus"
+            echo '```'
+            flyctl status --app "$APP" 2>&1 || true
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
