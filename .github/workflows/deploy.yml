@@ -1,0 +1,152 @@
+# Driftsätter Runner Lab till Fly.io från GitHubs runners.
+#
+# Varför det här finns: du behöver aldrig köra flyctl lokalt, och din
+# Fly-token lämnar aldrig GitHubs secret-lager. Den läses in i jobbet vid
+# körning och syns varken i loggen eller för någon som läser repot.
+#
+# Engångsuppsättning, allt i GitHubs gränssnitt:
+#   1. Skaffa en Fly-token:  fly tokens create deploy -x 8760h
+#      (eller via fly.io/dashboard → Tokens)
+#   2. Settings → Secrets and variables → Actions → New repository secret
+#        FLY_API_TOKEN     din Fly-token
+#        SOLANA_RPC_URL    din RPC (valfri men starkt rekommenderad)
+#   3. Samma sida, fliken Variables → New repository variable
+#        FLY_APP_NAME      globalt unikt namn, t.ex. runner-lab-thekinghim
+#        FLY_REGION        t.ex. arn (Stockholm)
+#        FLY_ORG           valfri, standard "personal"
+#   4. Actions → "Deploy Runner Lab" → Run workflow
+#
+# Efter första körningen deployar varje push till runner-lab/ automatiskt.
+
+name: Deploy Runner Lab
+
+on:
+  push:
+    branches: [claude/memecoin-acquisition-strategy-4uomsi, main]
+    paths: ['runner-lab/**', '.github/workflows/deploy.yml']
+  workflow_dispatch:
+
+concurrency:
+  # Två samtidiga deployer mot samma app lämnar den i ett obestämt läge.
+  group: fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy till Fly.io
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      APP: ${{ vars.FLY_APP_NAME }}
+      REGION: ${{ vars.FLY_REGION || 'arn' }}
+      FLY_ORG: ${{ vars.FLY_ORG || 'personal' }}
+      # secrets-kontexten går inte att läsa i ett steg-if, så RPC:n lyfts hit
+      # och steget villkoras på env i stället.
+      RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kontrollera att uppsättningen är gjord
+        run: |
+          missing=0
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::Saknar hemligheten FLY_API_TOKEN. Se kommentaren överst i deploy.yml."
+            missing=1
+          fi
+          if [ -z "$APP" ]; then
+            echo "::error::Saknar variabeln FLY_APP_NAME. Måste vara globalt unik på Fly."
+            missing=1
+          fi
+          [ "$missing" = "0" ] || exit 1
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Testa och bygg innan något rörs
+        working-directory: runner-lab
+        run: |
+          # En trasig deploy är dyrare än ett misslyckat bygge: appen slutar
+          # spela in medan man felsöker, och den tiden går inte att hämta igen.
+          node --test
+          node --check src/index.js
+
+      - name: Skapa appen om den inte finns
+        working-directory: runner-lab
+        run: |
+          if flyctl status --app "$APP" >/dev/null 2>&1; then
+            echo "Appen $APP finns redan."
+          else
+            echo "Skapar $APP…"
+            flyctl apps create "$APP" --org "$FLY_ORG"
+          fi
+
+      - name: Skapa volymen om den inte finns
+        working-directory: runner-lab
+        run: |
+          # Volymen bär arkivet och creator-registret. Skapas den inte före
+          # första starten börjar registret om vid varje deploy, och det är
+          # den enda delen av produkten som inte går att återskapa.
+          if flyctl volumes list --app "$APP" --json | grep -q '"name": *"runner_data"'; then
+            echo "Volymen runner_data finns redan."
+          else
+            echo "Skapar volymen runner_data i $REGION…"
+            flyctl volumes create runner_data \
+              --size 3 --region "$REGION" --app "$APP" --yes
+          fi
+
+      - name: Lägg in RPC-inställningar
+        if: env.RPC_URL != ''
+        working-directory: runner-lab
+        run: |
+          # Egen RPC tål betydligt högre takt än den publika, så trösklarna
+          # höjs samtidigt. Utan detta fastnar omdömena på VÄNTA.
+          flyctl secrets set --app "$APP" --stage \
+            SOLANA_RPC_URL="$RPC_URL" \
+            RPC_CONCURRENCY=8 \
+            RPC_MIN_INTERVAL_MS=60
+
+      - name: Varna om RPC saknas
+        if: env.RPC_URL == ''
+        run: |
+          echo "::warning::Ingen SOLANA_RPC_URL satt. Servern kör mot den publika"
+          echo "::warning::endpointen, som stryper — omdömena kommer fastna på VÄNTA."
+
+      - name: Deploya
+        working-directory: runner-lab
+        run: |
+          # --ha=false ger en maskin. Med två håller varje maskin sin egen
+          # pump.fun-anslutning och sitt eget halva arkiv, och två besökare
+          # ser olika data beroende på vilken de landar på.
+          flyctl deploy --remote-only --ha=false --app "$APP" \
+            --wait-timeout 300
+
+      - name: Verifiera att den faktiskt spelar in
+        working-directory: runner-lab
+        run: |
+          url="https://$APP.fly.dev"
+          echo "Väntar på att $url ska svara…"
+          for i in $(seq 1 20); do
+            body=$(curl -fsS --max-time 10 "$url/health" 2>/dev/null) && break
+            sleep 6
+          done
+
+          if [ -z "${body:-}" ]; then
+            echo "::error::$url/health svarade inte. Kör: flyctl logs --app $APP"
+            exit 1
+          fi
+          echo "$body"
+
+          # Att servern svarar räcker inte — den ska ha nått pump.fun.
+          state=$(printf '%s' "$body" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')
+          if [ "$state" != "live" ]; then
+            echo "::warning::Servern lever men strömmen är i läget \"$state\"."
+            echo "::warning::Kontrollera med: flyctl logs --app $APP"
+          fi
+
+          echo "### Runner Lab är live" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**$url**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "$body" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
