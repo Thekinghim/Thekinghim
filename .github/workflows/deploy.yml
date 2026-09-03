@@ -131,7 +131,7 @@ jobs:
           done
 
           if [ -z "${body:-}" ]; then
-            echo "::error::$url/health svarade inte. Kör: flyctl logs --app $APP"
+            echo "::error::$url/health svarade inte."
             exit 1
           fi
           echo "$body"
@@ -149,4 +149,23 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           echo "$body" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hämta Fly-loggar vid fel
+        # Sandlådan den här koden utvecklas i når inte fly.io, så det här
+        # steget är enda sättet att se varför en instans inte svarade — utan
+        # det är en misslyckad hälsokontroll en gissningslek. --no-tail gör
+        # att kommandot returnerar i stället för att strömma för evigt.
+        if: failure()
+        working-directory: runner-lab
+        run: |
+          echo "### Fly-loggar (senaste rader, --no-tail)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          flyctl logs --app "$APP" --no-tail 2>&1 | tail -150 >> "$GITHUB_STEP_SUMMARY" || \
+            echo "(flyctl logs misslyckades också)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### Maskinstatus" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          flyctl status --app "$APP" 2>&1 >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
