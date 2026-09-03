@@ -316,3 +316,81 @@ test('en dev som köper flaggas inte', () => {
   r.onTrade({ mint: 'd2', txType: 'buy', solAmount: 1, traderPublicKey: 'dev2' });
   assert.equal(r.board()[0].devSells, 0);
 });
+
+/* ---------- bundle-detektion ---------- */
+import { SniperRegistry, analyzeBundle, SUPPLY } from '../src/engine/bundles.js';
+
+test('köp i öppningsfönstret samlas, devens eget räknas inte dubbelt', () => {
+  const r = new Radar();
+  const e = r.onLaunch({ mint: 'b1', traderPublicKey: 'dev', initialBuy: SUPPLY * 0.05 });
+  r.onTrade({ mint: 'b1', txType: 'buy', solAmount: 1, tokenAmount: SUPPLY * 0.08, traderPublicKey: 'sniper1' });
+  r.onTrade({ mint: 'b1', txType: 'buy', solAmount: 1, tokenAmount: SUPPLY * 0.07, traderPublicKey: 'sniper2' });
+  // Dev som köper igen i öppningen är redan bokförd via initialBuy.
+  r.onTrade({ mint: 'b1', txType: 'buy', solAmount: 1, tokenAmount: SUPPLY * 0.10, traderPublicKey: 'dev' });
+  assert.equal(e.openingBuyers.length, 2);
+  const b = r.board()[0].bundle;
+  assert.ok(Math.abs(b.bundleShare - 0.20) < 1e-9, `väntade 20 %, fick ${b.bundleShare}`);
+});
+
+test('köp efter öppningsfönstret räknas inte som bundle', () => {
+  const r = new Radar();
+  const e = r.onLaunch({ mint: 'b2', traderPublicKey: 'dev' });
+  e.launchedAt = Date.now() - 10_000;
+  r.onTrade({ mint: 'b2', txType: 'buy', solAmount: 1, tokenAmount: SUPPLY * 0.3, traderPublicKey: 'sen' });
+  assert.equal(e.openingBuyers.length, 0);
+  assert.equal(r.board()[0].bundle.bundleShare, 0);
+});
+
+test('över en fjärdedel bundlat diskvalificerar', () => {
+  const clean = row();
+  assert.equal(verdictFor(clean).verdict, 'KÖP');
+  const bundled = row({ bundle: { bundleShare: 0.31, openingBuyers: 4, knownSnipers: 0, identicalSized: false, mergedTopHolderPct: null, delta: null } });
+  assert.equal(verdictFor(bundled).verdict, 'SKIPPA');
+  assert.match(verdictFor(bundled).reason, /bundlat 31 %/);
+});
+
+test('kända snipers sänker KÖP till VÄNTA utan att diskvalificera', () => {
+  const v = verdictFor(row({ bundle: { bundleShare: 0.05, openingBuyers: 3, knownSnipers: 2, identicalSized: false, mergedTopHolderPct: null, delta: null } }));
+  assert.equal(v.verdict, 'VÄNTA');
+  assert.match(v.reason, /kända snipers/);
+});
+
+test('sniperregistret räknar varje token en gång och överlever omstart', () => {
+  const dir = tmp();
+  const reg = new SniperRegistry({ dir });
+  reg.record('w', 'm1'); reg.record('w', 'm1'); reg.record('w', 'm2'); reg.record('w', 'm3');
+  assert.equal(reg.count('w'), 3);
+  assert.equal(reg.isKnown('w'), true);
+  assert.equal(new SniperRegistry({ dir }).count('w'), 3);
+});
+
+test('sammanslagen topp 10 är en undre gräns och aldrig lägre än den råa', () => {
+  const holders = { unknown: false, topHolderPct: 30, top: [{ address: 'a', pct: 12 }] };
+  const b = analyzeBundle({ creatorInitialTokens: SUPPLY * 0.2, openingBuyers: [] }, null, holders);
+  assert.ok(b.mergedTopHolderPct >= 30);
+  assert.ok(b.delta >= 0);
+  assert.equal(analyzeBundle({ creatorInitialTokens: 0, openingBuyers: [] }, null, null).delta, null);
+});
+
+test('en öppningsköpare utan känd tokenmängd gör andelen till en undre gräns', () => {
+  const r = new Radar();
+  r.onLaunch({ mint: 'b3', traderPublicKey: 'dev', initialBuy: SUPPLY * 0.05 });
+  r.onTrade({ mint: 'b3', txType: 'buy', solAmount: 1, tokenAmount: SUPPLY * 0.06, traderPublicKey: 's1' });
+  r.onTrade({ mint: 'b3', txType: 'buy', solAmount: 9, traderPublicKey: 's2' }); // tokenAmount saknas
+  const b = r.board()[0].bundle;
+  assert.equal(b.unknownTokens, 1);
+  assert.equal(b.shareIsLowerBound, true);
+  assert.ok(Math.abs(b.bundleShare - 0.11) < 1e-9, 'känd del räknas fortfarande');
+});
+
+test('ofullständig bundle-andel kan fälla men aldrig fria', () => {
+  const lowerBound = { bundleShare: 0.05, shareIsLowerBound: true, unknownTokens: 1,
+    openingBuyers: 2, knownSnipers: 0, identicalSized: false, mergedTopHolderPct: null, delta: null };
+  const v = verdictFor(row({ bundle: lowerBound }));
+  assert.equal(v.verdict, 'VÄNTA', 'osäker andel får inte ge KÖP');
+  assert.ok(v.missing.includes('bundle-andel ofullständig'));
+
+  // Men en undre gräns som redan passerat taket räcker för att fälla.
+  const overCap = { ...lowerBound, bundleShare: 0.4 };
+  assert.equal(verdictFor(row({ bundle: overCap })).verdict, 'SKIPPA');
+});

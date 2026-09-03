@@ -1,6 +1,7 @@
 import { TokenWindow } from './windows.js';
 import { config } from '../config.js';
 import { verdictFor } from './verdict.js';
+import { analyzeBundle, OPENING_WINDOW_MS } from './bundles.js';
 
 /**
  * Radarn: håller varje ny mint i fönstret, uppdaterar mått från trades och
@@ -12,8 +13,13 @@ import { verdictFor } from './verdict.js';
  * efteråt, och tills de är klara säger radarn ingenting om risk.
  */
 export class Radar {
-  constructor(handlers = {}) {
+  /**
+   * @param {*} handlers
+   * @param {{snipers?: import('./bundles.js').SniperRegistry}} [deps]
+   */
+  constructor(handlers = {}, deps = {}) {
     this.handlers = handlers;
+    this.snipers = deps.snipers ?? null;
     /** @type {Map<string, any>} */
     this.tokens = new Map();
     this.counters = { launches: 0, trades: 0, qualified: 0, migrations: 0, dropped: 0, devSells: 0 };
@@ -53,6 +59,11 @@ export class Radar {
       devSells: 0,
       devSoldSol: 0,
       devSoldAt: null,
+      /**
+       * Köp som landade innan någon människa hunnit reagera. Grunden för
+       * bundle-detektionen — se bundles.js.
+       */
+      openingBuyers: [],
     };
     this.tokens.set(raw.mint, entry);
     this.handlers.onNew?.(entry);
@@ -64,6 +75,26 @@ export class Radar {
     const entry = this.tokens.get(raw?.mint);
     if (!entry) return;
     this.counters.trades++;
+
+    const sinceLaunch = Date.now() - entry.launchedAt;
+    if (
+      raw.txType === 'buy' &&
+      sinceLaunch <= OPENING_WINDOW_MS &&
+      raw.traderPublicKey &&
+      raw.traderPublicKey !== entry.creator
+    ) {
+      // tokenAmount saknas i vissa event. Vi skiljer på "köpte noll" och
+      // "vi vet inte hur mycket" — se analyzeBundle, där skillnaden avgör
+      // om andelen får användas som beslutsunderlag alls.
+      const tokens = Number(raw.tokenAmount);
+      entry.openingBuyers.push({
+        wallet: raw.traderPublicKey,
+        tokens: Number.isFinite(tokens) && tokens > 0 ? tokens : null,
+        sol: Number(raw.solAmount ?? 0),
+        msAfterLaunch: sinceLaunch,
+      });
+      this.snipers?.record(raw.traderPublicKey, entry.mint);
+    }
 
     if (raw.txType === 'sell' && entry.creator && raw.traderPublicKey === entry.creator) {
       entry.devSells++;
@@ -198,6 +229,8 @@ export class Radar {
         devSells: entry.devSells,
         devSoldSol: entry.devSoldSol,
         devSoldAt: entry.devSoldAt,
+        bundle: analyzeBundle(entry, this.snipers, entry.holders),
+        openingBuyers: entry.openingBuyers,
         // Kvalificering är klibbig — anropen är redan spenderade och ska inte
         // spenderas om. Men ett flöde som vänt måste synas, annars ser en
         // token som dumpas fortfarande ut som en kandidat.

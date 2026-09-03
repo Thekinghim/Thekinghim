@@ -15,6 +15,11 @@ import { config } from '../config.js';
 export const RULES = {
   /** Diskvalificerande. Ett utslag räcker. */
   maxTopHolderPct: 60,
+  /**
+   * Andel av supplyn som köptes innan någon hann reagera, dev inräknad.
+   * Över en fjärdedel äger en aktör marknaden oavsett vad topp-10 säger.
+   */
+  maxBundleShare: 0.25,
   maxDevOpeningPct: 15,
   maxEarlyExits: 4,
   /** Krav för KÖP. Alla måste vara uppfyllda. */
@@ -51,6 +56,13 @@ export function verdictFor(row) {
   if (pf?.checks?.authority?.state === 'fail') {
     return { verdict: 'SKIPPA', reason: pf.checks.authority.detail, missing: [] };
   }
+  if (row.bundle && row.bundle.bundleShare > RULES.maxBundleShare) {
+    return {
+      verdict: 'SKIPPA',
+      reason: `bundlat ${(row.bundle.bundleShare * 100).toFixed(0)} % av supplyn i öppningen`,
+      missing: [],
+    };
+  }
   if (holders && !holders.unknown && holders.topHolderPct > RULES.maxTopHolderPct) {
     return { verdict: 'SKIPPA', reason: `topp 10 äger ${holders.topHolderPct.toFixed(0)} %`, missing: [] };
   }
@@ -72,6 +84,9 @@ export function verdictFor(row) {
   if (!pf?.checks?.authority) missing.push('authority-kontroll');
   else if (pf.checks.authority.state === 'unknown') missing.push('authority okänd');
   if (!holders || holders.unknown) missing.push('innehavarfördelning');
+  // En bundle-andel som bara är en undre gräns duger till att fälla, men
+  // aldrig till att fria.
+  if (row.bundle?.shareIsLowerBound) missing.push('bundle-andel ofullständig');
   if (dev === null) missing.push('dev-andel');
   if (!row.tracking && m.totalTrades === 0) missing.push('flöde');
   if (missing.length > 0) {
@@ -84,6 +99,10 @@ export function verdictFor(row) {
   if (holders.topHolderPct > b.maxTopHolderPct) fails.push(`topp 10 ${holders.topHolderPct.toFixed(0)} %`);
   if (dev > b.maxDevOpeningPct) fails.push(`dev ${dev.toFixed(1)} %`);
   if (m.uniqueBuyers < b.minUniqueBuyers) fails.push(`${m.uniqueBuyers} köpare`);
+  if (row.bundle?.knownSnipers >= 2) fails.push(`${row.bundle.knownSnipers} kända snipers i öppningen`);
+  if (row.bundle?.mergedTopHolderPct > b.maxTopHolderPct) {
+    fails.push(`sammanslagen topp 10 ${row.bundle.mergedTopHolderPct.toFixed(0)} %`);
+  }
   if (m.netSol < b.minNetSol) fails.push(`netto ${m.netSol.toFixed(2)} SOL`);
   if (row.curveProgress !== null && row.curveProgress < b.minCurveProgress) {
     fails.push(`kurva ${(row.curveProgress * 100).toFixed(0)} %`);

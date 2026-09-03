@@ -230,6 +230,7 @@ function signature(t) {
   return [
     t.verdict?.verdict, t.verdict?.reason, t.lane, t.tracking, t.qualified,
     t.probeExpired, t.flowReversed, t.migratedAt, t.earlyExits, t.devSells,
+    t.bundle?.bundleShare?.toFixed(3), t.bundle?.knownSnipers, t.bundle?.openingBuyers,
     t.preflight?.checks?.authority?.state, t.holders?.topHolderPct?.toFixed(0),
     t.creatorOpeningShare?.toFixed(1), t.curveProgress?.toFixed(3),
     m.uniqueBuyers, m.uniqueSellers, m.netSol.toFixed(2), mcOf(t).toFixed(1),
@@ -251,6 +252,14 @@ function rowHtml(t) {
 
   const pills = [];
   if (t.devSells > 0) pills.push(['bad', `DEV SÅLT ${fmt(t.devSoldSol, 2)} SOL`]);
+  if (t.bundle) {
+    const b = t.bundle;
+    const pct = b.bundleShare * 100;
+    if (pct >= 25) pills.push(['bad', `bundle ${pct.toFixed(0)}%`]);
+    else if (pct >= 12) pills.push(['warn', `bundle ${pct.toFixed(0)}%`]);
+    else if (b.openingBuyers > 0) pills.push(['mut', `bundle ${pct.toFixed(0)}%`]);
+    if (b.knownSnipers > 0) pills.push(['warn', `${b.knownSnipers} kända snipers`]);
+  }
   if (t.flowReversed) pills.push(['bad', 'flödet vänt']);
   if (t.creatorOpeningShare !== null) {
     const d = t.creatorOpeningShare;
@@ -506,6 +515,19 @@ async function refreshDrawer() {
           ? `${d.reputation.graduations}/${d.reputation.settledLaunches} graduerade`
           : '<span class="unk">ingen avgjord launch</span>'}</dd></div>
       </dl></div>
+
+    ${d.bundle ? `<div class="sect"><h3>Bundle</h3>
+      <dl class="kv">
+        <div class="r"><dt>Öppningsköp</dt><dd>${d.bundle.openingBuyers} wallets inom 3 s</dd></div>
+        <div class="r"><dt>Bundlad andel</dt><dd class="${d.bundle.bundleShare >= 0.25 ? 'bad' : d.bundle.bundleShare >= 0.12 ? 'unk' : 'ok'}">${
+          (d.bundle.bundleShare * 100).toFixed(1)} % av supplyn, dev inräknad</dd></div>
+        <div class="r"><dt>Kända snipers</dt><dd class="${d.bundle.knownSnipers ? 'unk' : ''}">${d.bundle.knownSnipers}</dd></div>
+        ${d.bundle.identicalSized ? '<div class="r"><dt>Mönster</dt><dd class="unk">identiska belopp — ett skript</dd></div>' : ''}
+        ${d.bundle.delta !== null ? `<div class="r"><dt>Topp 10 rå → slagen</dt><dd>${fmt(d.holders.topHolderPct, 0)} % → minst ${fmt(d.bundle.mergedTopHolderPct, 0)} %</dd></div>` : ''}
+      </dl>
+      ${d.openingBuyers?.length ? `<div class="hold" style="margin-top:9px">${d.openingBuyers.slice(0, 8).map((b) =>
+        `<div><span>${esc(b.wallet.slice(0, 14))}… <i style="color:var(--faint)">${b.msAfterLaunch} ms</i></span><b>${fmt(b.sol, 3)}</b></div>`).join('')}</div>` : ''}
+    </div>` : ''}
 
     <div class="sect"><h3>Största innehavare</h3>
       ${d.holders && !d.holders.unknown

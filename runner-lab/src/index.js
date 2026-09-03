@@ -6,6 +6,7 @@ import { EventStore } from './store/event-store.js';
 import { Radar } from './engine/radar.js';
 import { CreatorRegistry } from './engine/creators.js';
 import { OutcomeLedger } from './engine/outcomes.js';
+import { SniperRegistry } from './engine/bundles.js';
 import { PreflightQueue } from './chain/preflight.js';
 import { readMintAuthorities, readTopHolders } from './chain/rpc.js';
 import { fetchTokenMetadata, metadataStats } from './chain/metadata.js';
@@ -13,6 +14,7 @@ import { fetchTokenMetadata, metadataStats } from './chain/metadata.js';
 const store = new EventStore(config.store);
 const creators = new CreatorRegistry({ dir: config.store.dir });
 const outcomes = new OutcomeLedger({ dir: config.store.dir });
+const snipers = new SniperRegistry({ dir: config.store.dir });
 
 let stream = null;
 let status = { state: 'startar', source: config.source, tracked: 0 };
@@ -64,7 +66,7 @@ const radar = new Radar({
     console.log(`\x1b[36m[MIGRATION]\x1b[0m ${entry.symbol || entry.mint.slice(0, 8)}`);
     dirty = true;
   },
-});
+}, { snipers });
 
 const handlers = {
   onLaunch: (raw) => { store.append('launch', raw); radar.onLaunch(raw); },
@@ -94,6 +96,7 @@ const app = {
       creators: creators.stats(),
       metadata: metadataStats(),
       outcomes: outcomes.stats(),
+      snipers: snipers.stats(),
       config: {
         windowMinutes: config.radar.windowMinutes,
         minUniqueBuyers: config.radar.minUniqueBuyers,
